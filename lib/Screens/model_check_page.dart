@@ -1,9 +1,9 @@
 // Model Check Page
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:local_ai_chat/Bloc/Bloc/model_bloc.dart';
-import 'package:local_ai_chat/Bloc/Events/model_events.dart';
-import 'package:local_ai_chat/Bloc/States/model_states.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/Bloc/model_bloc.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/Events/model_events.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/States/model_states.dart';
 import 'package:local_ai_chat/Screens/ai_chat_page.dart';
 
 class ModelCheckPage extends StatelessWidget {

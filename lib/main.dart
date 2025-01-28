@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:local_ai_chat/Bloc/Bloc/model_bloc.dart';
-import 'package:local_ai_chat/Bloc/Events/model_events.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/Bloc/model_bloc.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/Events/model_events.dart';
 import 'package:local_ai_chat/Screens/model_check_page.dart';
 
 void main() {

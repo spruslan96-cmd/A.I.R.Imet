@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:local_ai_chat/Bloc/Events/model_events.dart';
-import 'package:local_ai_chat/Bloc/States/model_states.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/Events/model_events.dart';
+import 'package:local_ai_chat/Bloc/Model_bloc/States/model_states.dart';
 import 'package:path_provider/path_provider.dart';
 
 class ModelBloc extends Bloc<ModelEvent, ModelState> {
