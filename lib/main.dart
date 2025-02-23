@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:local_ai_chat/Bloc/Model_bloc/Bloc/model_bloc.dart';
-import 'package:local_ai_chat/Bloc/Model_bloc/Events/model_events.dart';
-import 'package:local_ai_chat/Screens/model_check_page.dart';
+import 'package:local_ai_chat/Screens/ai_chat_page.dart';
 
-void main() {
-  runApp(const ChatAIApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  runApp(const ChatAIApp()); // Run the app
 }
 
 class ChatAIApp extends StatelessWidget {
@@ -16,10 +15,7 @@ class ChatAIApp extends StatelessWidget {
     return MaterialApp(
       title: 'Chat with the AI',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: BlocProvider(
-        create: (context) => ModelBloc()..add(CheckModelEvent()),
-        child: const ModelCheckPage(),
-      ),
+      home: const ChatPage(), // Go to your ChatPage (UI)
     );
   }
 }
