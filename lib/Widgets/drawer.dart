@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:local_ai_chat/Screens/ai_chat_page.dart';
+import 'package:local_ai_chat/Screens/chat_page.dart';
 import 'package:local_ai_chat/Screens/manage_models.dart';
 import 'package:local_ai_chat/Screens/model_check_page.dart';
+import 'package:local_ai_chat/Screens/talk_page.dart';
 
 class Hamburger extends StatelessWidget {
   const Hamburger({
@@ -25,7 +26,16 @@ class Hamburger extends StatelessWidget {
                 return const ChatPage();
               }));
             },
-            child: Text('chat Page'),
+            child: Text('Chat Page'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (BuildContext context) {
+                return const TalkPage();
+              }));
+            },
+            child: Text('Talk Page'),
           ),
           TextButton(
             onPressed: () {
