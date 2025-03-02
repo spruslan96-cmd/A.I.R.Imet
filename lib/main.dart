@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:local_ai_chat/Screens/ai_chat_page.dart';
+import 'package:local_ai_chat/Screens/chat_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
