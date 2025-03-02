@@ -12,7 +12,6 @@ enum Role {
   user,
   assistant;
 
-  /// Converts Role enum to its string representation
   String get value => switch (this) {
         Role.unknown => 'unknown',
         Role.system => 'system',
@@ -20,7 +19,6 @@ enum Role {
         Role.assistant => 'assistant',
       };
 
-  /// Creates a Role from a string value
   static Role fromString(String value) => switch (value.toLowerCase()) {
         'unknown' => Role.unknown,
         'system' => Role.system,
@@ -33,14 +31,13 @@ enum Role {
 /// Represents a single message in a chat conversation
 class Message {
   final Role role;
-  String content; // content is now mutable
+  String content; // content is now mutable, consider if it needs to be mutable
 
   Message({
     required this.role,
     required this.content,
   });
 
-  /// Creates a Message from JSON
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
       role: Role.fromString(json['role'] as String),
@@ -48,7 +45,6 @@ class Message {
     );
   }
 
-  /// Converts Message to JSON
   Map<String, dynamic> toJson() => {
         'role': role.value,
         'content': content,
@@ -58,7 +54,7 @@ class Message {
   String toString() => 'Message(role: ${role.value}, content: $content)';
 }
 
-// Manages a collection of chat messages
+/// Manages a collection of chat messages
 class ChatHistory {
   final List<Message> messages;
 
@@ -82,14 +78,25 @@ class ChatHistory {
     }
   }
 
-  /// Exports chat history in ChatML format
   String _exportChatML() {
     final buffer = StringBuffer();
 
-    for (final message in messages) {
-      buffer.writeln('<|im_start|>${message.role.value}');
-      buffer.writeln(message.content);
-      buffer.writeln('<|im_end|>');
+    for (int i = 0; i < messages.length; i++) {
+      final message = messages[i];
+
+      if (message.role == Role.user) {
+        buffer.writeln('<|im_start|>user');
+        buffer.writeln(message.content);
+        buffer.writeln('<|im_end|>assistant');
+      } else if (message.role == Role.assistant) {
+        buffer.writeln('<|im_start|>assistant');
+        buffer.writeln(message.content);
+        buffer.writeln('<|im_end|>');
+      } else if (message.role == Role.system) {
+        buffer.writeln('<|im_start|>system');
+        buffer.writeln(message.content);
+        buffer.writeln('<|im_end|>');
+      }
     }
 
     return buffer.toString();
@@ -103,13 +110,18 @@ class ChatHistory {
       switch (message.role) {
         case Role.system:
           buffer.writeln('### Instruction:');
+          break; // Added break to prevent fall-through
         case Role.user:
           buffer.writeln('### Input:');
+          break; // Added break to prevent fall-through
         case Role.assistant:
           buffer.writeln('### Response:');
+          break; // Added break to prevent fall-through
         case Role.unknown:
           buffer.writeln('### Unknown:');
+          break; // Added break to prevent fall-through
       }
+
       buffer.writeln();
       buffer.writeln(message.content);
       buffer.writeln();
@@ -118,7 +130,6 @@ class ChatHistory {
     return buffer.toString();
   }
 
-  /// Creates a ChatHistory from JSON
   factory ChatHistory.fromJson(Map<String, dynamic> json) {
     final chatHistory = ChatHistory();
     final messagesList = json['messages'] as List<dynamic>;
@@ -131,15 +142,12 @@ class ChatHistory {
     return chatHistory;
   }
 
-  /// Converts ChatHistory to JSON
   Map<String, dynamic> toJson() => {
         'messages': messages.map((message) => message.toJson()).toList(),
       };
 
-  /// Clears all messages from the chat history
   void clear() => messages.clear();
 
-  /// Returns the number of messages in the chat history
   int get length => messages.length;
 
   @override
