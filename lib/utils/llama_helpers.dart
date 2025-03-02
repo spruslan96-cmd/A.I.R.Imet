@@ -1,247 +1,239 @@
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
+import 'package:local_ai_chat/models/chat_format.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
 
-// class ChatML extends PromptFormat {
-//   ChatML({
-//     required String inputSequence,
-//     required String outputSequence,
-//     required String systemSequence,
-//     String? stopSequence,
-//   }) : super(
-//           PromptFormatType.chatml,
-//           inputSequence: inputSequence,
-//           outputSequence: outputSequence,
-//           systemSequence: systemSequence,
-//           stopSequence: stopSequence,
-//         );
-// }
-
-class ChatMLFormat extends PromptFormat {
-  ChatMLFormat({
-    String inputSequence = "<|im_start|>",
-    String outputSequence = "<|im_end|>",
-    String systemSequence = "<|im_start|>system\n",
-    String? stopSequence,
-  }) : super(
-          PromptFormatType.chatml,
-          inputSequence: inputSequence,
-          outputSequence: outputSequence,
-          systemSequence: systemSequence,
-          stopSequence: stopSequence,
-        );
-
-  @override
-  String formatPrompt(String prompt) {
-    return formatMessages([
-      {'role': 'user', 'content': prompt}
-    ]);
-  }
-
-  @override
-  String formatMessages(List<Map<String, dynamic>> messages) {
-    String formattedMessages = '';
-    for (var message in messages) {
-      if (message['role'] == 'user') {
-        formattedMessages += '$inputSequence${message['content']}';
-      } else if (message['role'] == 'assistant') {
-        formattedMessages += '$outputSequence${message['content']}';
-      } else if (message['role'] == 'system') {
-        formattedMessages += '$systemSequence${message['content']}';
-      }
-
-      if (stopSequence != null) {
-        formattedMessages += stopSequence!;
-      }
-    }
-    return formattedMessages;
-  }
-}
+import 'package:llama_cpp_dart/llama_cpp_dart.dart' as llama;
 
 class LlamaHelper {
-  LlamaParent? _llamaParent;
   bool _modelLoaded = false;
-  final chatMLFormat = ChatMLFormat();
+  final ChatMLFormat _chatMLFormat = ChatMLFormat();
   final chatHistory = ChatHistory();
+  String? modelPath;
+  String? voiceModelPath; // Add a path for the voice model
 
+  // Load available models
   Future<List<String>> loadAvailableModels() async {
     final directory = await getApplicationDocumentsDirectory();
     final files = directory.listSync();
+
     return files
         .where((file) => file is File && file.path.endsWith('.gguf'))
         .map((file) => file.path)
         .toList();
   }
 
+  // Load the main model
   Future<void> loadModel(String modelFileName) async {
     if (_modelLoaded) return;
 
-    final modelPath = await getModelPath(modelFileName);
+    modelPath = await getModelPath(modelFileName);
     print('MODEL PATH GOT AS: $modelPath');
+
+    final _contextParams = ContextParams();
+    _contextParams.nCtx = 1024;
+    _contextParams.nPredit = 512;
+
     try {
-      final loadCommand = LlamaLoad(
-        path: modelPath,
+      final loadCommand = llama.LlamaLoad(
+        path: modelPath!,
         modelParams: ModelParams(),
-        contextParams: ContextParams(),
+        contextParams: _contextParams,
         samplingParams: SamplerParams(),
-        format: chatMLFormat,
+        format: _chatMLFormat,
       );
 
-      _llamaParent = LlamaParent(loadCommand);
-      await _llamaParent!.init(); // Initialize asynchronously
+      final llamaParent = LlamaParent(loadCommand);
+      await llamaParent.init(); // Initialize here, but don't store
 
       _modelLoaded = true;
+
+      String initialPrompt = """
+      You are an AI assistant designed to help users in a friendly, supportive, and conversational manner. Your role is to provide clear, informative, and empathetic responses, treating the user like a close friend. 
+      """;
+
+      chatHistory.addMessage(role: Role.system, content: initialPrompt);
+
       print("LlamaHelper.loadModel: Model loaded successfully");
     } catch (e) {
       print("LlamaHelper.loadModel: Error loading model: $e");
-      rethrow; // Re-throw the exception
+      rethrow;
     }
   }
 
+  // Generate text output with multithreading
   Stream<String> generateText(String prompt) async* {
-    if (_llamaParent == null || !_modelLoaded) {
-      throw Exception('Model not loaded');
+    if (!_modelLoaded || modelPath == null) {
+      throw Exception('Model not loaded or model path not set');
     }
 
     chatHistory.addMessage(role: Role.user, content: prompt);
     final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+    print('Formatted User Prompt: $formattedPrompt');
 
-    _llamaParent!.sendPrompt(formattedPrompt);
+    final _contextParams = ContextParams();
+    _contextParams.nCtx = 1024;
+    _contextParams.nPredit = 512;
 
-    await for (final token in _llamaParent!.stream) {
-      // Correct way to handle stream
-      final chunk = chatMLFormat.filterResponse(token);
-      if (chunk != null) {
+    final loadCommand = llama.LlamaLoad(
+      path: modelPath!,
+      modelParams: ModelParams(),
+      contextParams: _contextParams,
+      samplingParams: SamplerParams(),
+      format: _chatMLFormat,
+    );
+
+    final llamaParent = LlamaParent(loadCommand);
+    await llamaParent.init();
+
+    try {
+      // Use compute to run the inference in a separate isolate
+      await for (final chunk
+          in await compute<Map<String, dynamic>, Stream<String>>(
+        _generateTextIsolate,
+        {
+          'llamaParent': llamaParent,
+          'formattedPrompt': formattedPrompt,
+          'chatMLFormat': _chatMLFormat,
+        },
+      )) {
         yield chunk;
       }
+    } catch (e) {
+      print("Error during generation: $e");
+    } finally {
+      llamaParent.dispose();
     }
   }
 
+  // Isolate function for text generation
+  static Stream<String> _generateTextIsolate(
+      Map<String, dynamic> params) async* {
+    final llamaParent = params['llamaParent'] as LlamaParent;
+    final formattedPrompt = params['formattedPrompt'] as String;
+    final chatMLFormat = params['chatMLFormat'] as ChatMLFormat;
+
+    llamaParent.sendPrompt(formattedPrompt);
+
+    String currentResponse = '';
+
+    try {
+      await for (final chunk in llamaParent.stream) {
+        final filteredChunk = chatMLFormat.filterResponse(chunk);
+        if (filteredChunk != null) {
+          currentResponse += filteredChunk;
+          yield filteredChunk;
+        }
+      }
+    } catch (e) {
+      print("Error in isolate during generation: $e");
+    }
+    // No need to dispose llamaParent, it's done in the main isolate
+  }
+
+  // Generate voice response (for lighter model) with multithreading
+  Stream<String> generateVoice(String spokenText) async* {
+    if (!_modelLoaded || voiceModelPath == null) {
+      throw Exception('Voice model not loaded or voice model path not set');
+    }
+
+    chatHistory.addMessage(role: Role.user, content: spokenText);
+    final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+    print('Formatted User Prompt (Voice): $formattedPrompt');
+
+    final _contextParams = ContextParams();
+    _contextParams.nCtx = 512; // Lighter model, less context
+    _contextParams.nPredit = 256; // Smaller prediction size
+
+    final loadCommand = llama.LlamaLoad(
+      path: voiceModelPath!,
+      modelParams: ModelParams(),
+      contextParams: _contextParams,
+      samplingParams: SamplerParams(),
+      format: _chatMLFormat,
+    );
+
+    final llamaParent = LlamaParent(loadCommand);
+    await llamaParent.init();
+
+    try {
+      // Use compute to run the inference in a separate isolate
+      await for (final chunk
+          in await compute<Map<String, dynamic>, Stream<String>>(
+        _generateVoiceIsolate,
+        {
+          'llamaParent': llamaParent,
+          'formattedPrompt': formattedPrompt,
+          'chatMLFormat': _chatMLFormat,
+        },
+      )) {
+        yield chunk;
+      }
+    } catch (e) {
+      print("Error during voice generation: $e");
+    } finally {
+      llamaParent.dispose();
+    }
+  }
+
+  // Isolate function for voice generation
+  static Stream<String> _generateVoiceIsolate(
+      Map<String, dynamic> params) async* {
+    final llamaParent = params['llamaParent'] as LlamaParent;
+    final formattedPrompt = params['formattedPrompt'] as String;
+    final chatMLFormat = params['chatMLFormat'] as ChatMLFormat;
+
+    llamaParent.sendPrompt(formattedPrompt);
+
+    String currentResponse = '';
+
+    try {
+      await for (final chunk in llamaParent.stream) {
+        final filteredChunk = chatMLFormat.filterResponse(chunk);
+        if (filteredChunk != null) {
+          currentResponse += filteredChunk;
+          yield filteredChunk;
+        }
+      }
+    } catch (e) {
+      print("Error in isolate during voice generation: $e");
+    }
+  }
+
+  // Get the model path
   Future<String> getModelPath(String modelFileName) async {
     return '$modelFileName';
   }
 
-  Future<String> _writeToFile(ByteData data, String fileName) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$fileName');
-    await file.writeAsBytes(data.buffer.asUint8List());
-    return file.path;
-  }
+  // Load the voice model (for lighter model)
+  Future<void> loadVoiceModel(String modelFileName) async {
+    if (voiceModelPath != null) return;
 
-  void dispose() {
-    _llamaParent?.dispose();
+    voiceModelPath = await getModelPath(modelFileName);
+    print('VOICE MODEL PATH GOT AS: $voiceModelPath');
+
+    final _contextParams = ContextParams();
+    _contextParams.nCtx = 512; // Use a lighter context for the voice model
+    _contextParams.nPredit = 256; // Smaller prediction size for lighter model
+
+    try {
+      final loadCommand = llama.LlamaLoad(
+        path: voiceModelPath!,
+        modelParams: ModelParams(),
+        contextParams: _contextParams,
+        samplingParams: SamplerParams(),
+        format: _chatMLFormat,
+      );
+
+      final llamaParent = LlamaParent(loadCommand);
+      await llamaParent.init(); // Initialize here, but don't store
+
+      print("LlamaHelper.loadVoiceModel: Voice model loaded successfully");
+    } catch (e) {
+      print("LlamaHelper.loadVoiceModel: Error loading voice model: $e");
+      rethrow;
+    }
   }
 }
-
-// class ChatMLFormat extends PromptFormat {
-//   // ChatMLFormat class definition
-//   ChatMLFormat({
-//     String inputSequence = "<|im_start|>",
-//     String outputSequence = "<|im_end|>",
-//     String systemSequence = "<|im_start|>system\n",
-//     String? stopSequence,
-//   }) : super(
-//           PromptFormatType.chatml,
-//           inputSequence: inputSequence,
-//           outputSequence: outputSequence,
-//           systemSequence: systemSequence,
-//           stopSequence: stopSequence,
-//         );
-
-//   @override
-//   String formatPrompt(String prompt) {
-//     return formatMessages([
-//       {'role': 'user', 'content': prompt}
-//     ]);
-//   }
-
-//   @override
-//   String formatMessages(List<Map<String, dynamic>> messages) {
-//     String formattedMessages = '';
-//     for (var message in messages) {
-//       if (message['role'] == 'user') {
-//         formattedMessages += '$inputSequence${message['content']}';
-//       } else if (message['role'] == 'assistant') {
-//         formattedMessages += '$outputSequence${message['content']}';
-//       } else if (message['role'] == 'system') {
-//         formattedMessages += '$systemSequence${message['content']}';
-//       }
-
-//       if (stopSequence != null) {
-//         formattedMessages += stopSequence!;
-//       }
-//     }
-//     return formattedMessages;
-//   }
-// }
-
-// class LlamaHelper {
-//   LlamaParent? _llamaParent;
-//   bool _modelLoaded = false;
-//   final ChatMLFormat _chatMLFormat = ChatMLFormat(); // Instance of ChatMLFormat
-
-//   Future<List<String>> loadAvailableModels() async {
-//     final directory = await getApplicationDocumentsDirectory();
-//     final files = directory.listSync();
-
-//     return files
-//         .where((file) => file is File && file.path.endsWith('.gguf'))
-//         .map((file) => file.path)
-//         .toList();
-//   }
-
-//   Future<void> loadModel(String modelFileName) async {
-//     if (_modelLoaded) return;
-
-//     final modelPath = await getModelPath(modelFileName);
-//     print('MODEL PATH GOT AS: $modelPath');
-
-//     try {
-//       final loadCommand = LlamaLoad(
-//         path: modelPath,
-//         modelParams: ModelParams(),
-//         contextParams: ContextParams(),
-//         samplingParams: SamplerParams(),
-//         format: _chatMLFormat, // Use the instance of ChatMLFormat
-//       );
-
-//       _llamaParent = LlamaParent(loadCommand);
-//       await _llamaParent!.init();
-
-//       _modelLoaded = true;
-//       print("LlamaHelper.loadModel: Model loaded successfully");
-//     } catch (e) {
-//       print("LlamaHelper.loadModel: Error loading model: $e");
-//       rethrow;
-//     }
-//   }
-
-//   Stream<String> generateText(String prompt) {
-//     if (_llamaParent == null || !_modelLoaded) {
-//       print('MODEL NOT LOADED');
-//       throw Exception('Model not loaded');
-//     }
-
-//     final formattedPrompt = _chatMLFormat.formatPrompt(prompt); // Format prompt
-//     _llamaParent!.sendPrompt(formattedPrompt); // Send formatted prompt
-//     return _llamaParent!.stream;
-//   }
-
-//   Future<String> getModelPath(String modelFileName) async {
-//     return '$modelFileName';
-//   }
-
-//   // Future<String> _writeToFile(ByteData data, String fileName) async {
-//   //   final directory = await getApplicationDocumentsDirectory();
-//   //   final file = File('${directory.path}/$fileName');
-//   //   await file.writeAsBytes(data.buffer.asUint8List());
-//   //   return file.path;
-//   // }
-
-//   void dispose() {
-//     _llamaParent?.dispose();
-//   }
-// }
