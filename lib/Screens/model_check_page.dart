@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:local_ai_chat/Screens/ai_chat_page.dart';
+import 'package:local_ai_chat/Screens/chat_page.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
 import 'package:local_ai_chat/Widgets/model_card.dart';
 import 'package:local_ai_chat/utils/download_api.dart';
