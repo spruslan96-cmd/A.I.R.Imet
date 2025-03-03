@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:local_ai_chat/models/chat_format.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
@@ -63,7 +62,7 @@ class LlamaHelper {
     }
   }
 
-  // Generate text output with multithreading
+  // Generate text output
   Stream<String> generateText(String prompt) async* {
     if (!_modelLoaded || modelPath == null) {
       throw Exception('Model not loaded or model path not set');
@@ -88,52 +87,27 @@ class LlamaHelper {
     final llamaParent = LlamaParent(loadCommand);
     await llamaParent.init();
 
-    try {
-      // Use compute to run the inference in a separate isolate
-      await for (final chunk
-          in await compute<Map<String, dynamic>, Stream<String>>(
-        _generateTextIsolate,
-        {
-          'llamaParent': llamaParent,
-          'formattedPrompt': formattedPrompt,
-          'chatMLFormat': _chatMLFormat,
-        },
-      )) {
-        yield chunk;
-      }
-    } catch (e) {
-      print("Error during generation: $e");
-    } finally {
-      llamaParent.dispose();
-    }
-  }
-
-  // Isolate function for text generation
-  static Stream<String> _generateTextIsolate(
-      Map<String, dynamic> params) async* {
-    final llamaParent = params['llamaParent'] as LlamaParent;
-    final formattedPrompt = params['formattedPrompt'] as String;
-    final chatMLFormat = params['chatMLFormat'] as ChatMLFormat;
-
     llamaParent.sendPrompt(formattedPrompt);
 
     String currentResponse = '';
 
     try {
       await for (final chunk in llamaParent.stream) {
-        final filteredChunk = chatMLFormat.filterResponse(chunk);
+        final filteredChunk = _chatMLFormat.filterResponse(chunk);
         if (filteredChunk != null) {
-          currentResponse += filteredChunk;
-          yield filteredChunk;
+          currentResponse += filteredChunk; // Accumulate for history
+          yield filteredChunk; // Yield immediately for word-by-word display
         }
       }
     } catch (e) {
-      print("Error in isolate during generation: $e");
+      print("Error during generation: $e");
+    } finally {
+      llamaParent.dispose();
+      chatHistory.addMessage(role: Role.assistant, content: currentResponse);
     }
-    // No need to dispose llamaParent, it's done in the main isolate
   }
 
-  // Generate voice response (for lighter model) with multithreading
+  // Generate voice response (for lighter model)
   Stream<String> generateVoice(String spokenText) async* {
     if (!_modelLoaded || voiceModelPath == null) {
       throw Exception('Voice model not loaded or voice model path not set');
@@ -143,6 +117,7 @@ class LlamaHelper {
     final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
     print('Formatted User Prompt (Voice): $formattedPrompt');
 
+    // Assuming voice model uses similar parameters but for a lighter model
     final _contextParams = ContextParams();
     _contextParams.nCtx = 512; // Lighter model, less context
     _contextParams.nPredit = 256; // Smaller prediction size
@@ -158,47 +133,23 @@ class LlamaHelper {
     final llamaParent = LlamaParent(loadCommand);
     await llamaParent.init();
 
-    try {
-      // Use compute to run the inference in a separate isolate
-      await for (final chunk
-          in await compute<Map<String, dynamic>, Stream<String>>(
-        _generateVoiceIsolate,
-        {
-          'llamaParent': llamaParent,
-          'formattedPrompt': formattedPrompt,
-          'chatMLFormat': _chatMLFormat,
-        },
-      )) {
-        yield chunk;
-      }
-    } catch (e) {
-      print("Error during voice generation: $e");
-    } finally {
-      llamaParent.dispose();
-    }
-  }
-
-  // Isolate function for voice generation
-  static Stream<String> _generateVoiceIsolate(
-      Map<String, dynamic> params) async* {
-    final llamaParent = params['llamaParent'] as LlamaParent;
-    final formattedPrompt = params['formattedPrompt'] as String;
-    final chatMLFormat = params['chatMLFormat'] as ChatMLFormat;
-
     llamaParent.sendPrompt(formattedPrompt);
 
     String currentResponse = '';
 
     try {
       await for (final chunk in llamaParent.stream) {
-        final filteredChunk = chatMLFormat.filterResponse(chunk);
+        final filteredChunk = _chatMLFormat.filterResponse(chunk);
         if (filteredChunk != null) {
-          currentResponse += filteredChunk;
-          yield filteredChunk;
+          currentResponse += filteredChunk; // Accumulate for history
+          yield filteredChunk; // Yield immediately for word-by-word display
         }
       }
     } catch (e) {
-      print("Error in isolate during voice generation: $e");
+      print("Error during voice generation: $e");
+    } finally {
+      llamaParent.dispose();
+      chatHistory.addMessage(role: Role.assistant, content: currentResponse);
     }
   }
 
