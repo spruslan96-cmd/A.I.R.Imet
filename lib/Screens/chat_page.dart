@@ -63,6 +63,10 @@ class _ChatPageState extends State<ChatPage> {
         AiHelpers.showSnackBar(context, error);
       },
     );
+    setState(() {
+      _modelLoaded = true;
+      _selectedModel = modelFileName;
+    });
   }
 
   Future<void> _generateText() async {
@@ -74,8 +78,11 @@ class _ChatPageState extends State<ChatPage> {
     final prompt = _controller.text;
     setState(() {
       _messages.add({'sender': 'user', 'text': prompt});
+      _messages.add({'sender': 'ai', 'text': ''}); // Add an empty AI message
       _controller.clear();
     });
+
+    String aiResponse = ''; // Accumulate the response
 
     AiHelpers.generateText(
       prompt,
@@ -83,7 +90,8 @@ class _ChatPageState extends State<ChatPage> {
       ChatHistory(),
       (response) {
         setState(() {
-          _messages.add({'sender': 'ai', 'text': response});
+          aiResponse = response;
+          _messages.last['text'] = aiResponse; // Update the last message
         });
       },
       (error) {
