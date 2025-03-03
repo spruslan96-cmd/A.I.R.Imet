@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:local_ai_chat/utils/llama_helpers.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
+import 'package:local_ai_chat/utils/llama_helpers.dart';
+import 'package:local_ai_chat/utils/ai_helpers.dart'; // Import the helper
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart'; // Import flutter_tts
 
 class TalkPage extends StatefulWidget {
   const TalkPage({super.key});
@@ -16,196 +16,89 @@ class TalkPage extends StatefulWidget {
 }
 
 class _TalkPageState extends State<TalkPage> {
-  late stt.SpeechToText _speechToText;
-  late FlutterTts _flutterTts;
   final _llamaHelper = LlamaHelper();
-  final chatHistory = ChatHistory();
-  bool _isListening = false;
-  bool _isSpeaking = false;
-  bool _isLoading = false;
+  late stt.SpeechToText _speechToText;
+  late FlutterTts _flutterTts; // Create an instance of FlutterTts
   bool _modelLoaded = false;
   String _spokenText = '';
   String _responseText = '';
   String? _selectedModel;
   List<String> _availableModels = [];
-  StreamSubscription<String>? _generationSubscription;
+  bool _isListening = false;
+  bool _isSpeaking = false;
+  bool _isLoading = false;
   Timer? _animationTimer;
   double _circleRadius = 150.0;
+  Timer? _speechTimeout; // Add a timer
 
   @override
   void initState() {
     super.initState();
     _speechToText = stt.SpeechToText();
-    _flutterTts = FlutterTts();
-    _loadAvailableModels();
-    _initializeSpeechRecognition();
+    _flutterTts = FlutterTts(); // Initialize FlutterTts
+
+    AiHelpers.loadAvailableModels(
+      _llamaHelper,
+      (models) {
+        setState(() {
+          _availableModels = models;
+        });
+      },
+      (error) {
+        AiHelpers.showSnackBar(context, error);
+      },
+    );
   }
 
-  // Initialize speech recognition
-  Future<void> _initializeSpeechRecognition() async {
-    bool available = await _speechToText.initialize();
-    if (!available) {
-      print("Speech recognition is not available");
-    }
-  }
-
-  // Load available models
-  Future<void> _loadAvailableModels() async {
-    try {
-      final models = await _llamaHelper.loadAvailableModels();
-      setState(() {
-        _availableModels = models;
-      });
-    } catch (e) {
-      print("Error loading models: $e");
-      _showSnackBar("Error loading models: $e");
-    }
-  }
-
-  // Load the selected model
   Future<void> _loadModel(String modelFileName) async {
-    if (_modelLoaded) return;
-
+    AiHelpers.loadModel(
+      modelFileName,
+      _llamaHelper,
+      _modelLoaded,
+      (isLoading, message) {
+        setState(() {
+          _responseText = message;
+        });
+      },
+      (error) {
+        AiHelpers.showSnackBar(context, error);
+      },
+    );
     setState(() {
-      _isLoading = true;
-      _modelLoaded = false;
-      _responseText = "Loading model...";
+      _modelLoaded = true;
+      _selectedModel = modelFileName;
     });
-
-    try {
-      await _llamaHelper.loadModel(modelFileName);
-      setState(() {
-        _selectedModel = modelFileName;
-        _modelLoaded = true;
-        _isLoading = false;
-        _responseText = "";
-      });
-    } catch (e) {
-      print("Error loading model: $e");
-      setState(() {
-        _isLoading = false;
-        _responseText = "Error loading model.";
-      });
-      _showSnackBar("Error loading model: $e");
-    }
   }
 
-  // Request microphone permission and then start listening
-  Future<void> _startListening() async {
-    final status = await Permission.microphone.request();
-    if (status.isGranted) {
-      setState(() {
-        _isListening = true;
-        _spokenText = '';
-      });
-
-      Timer? _speechTimeout; // Timer to stop listening if no speech is detected
-
-      await _speechToText.listen(
-        onResult: (result) {
-          setState(() {
-            _spokenText = result.recognizedWords;
-          });
-          if (_speechTimeout != null && _speechTimeout!.isActive) {
-            _speechTimeout!.cancel(); // Reset timeout if speech is detected
-          }
-          _speechTimeout = Timer(const Duration(seconds: 3), () {
-            if (_isListening) {
-              _stopListening(); // Stop listening if no speech after 3 seconds
-            }
-          });
-        },
-        onSoundLevelChange: (level) {
-          if (_speechTimeout != null && _speechTimeout!.isActive) {
-            _speechTimeout!.cancel(); // Reset timer if sound detected
-          }
-          _speechTimeout = Timer(const Duration(seconds: 3), () {
-            if (_isListening) {
-              _stopListening(); // Stop listening if no sound after 3 seconds
-            }
-          });
-        },
-      );
-    } else {
-      _showSnackBar("Microphone permission is required to start listening.");
-    }
-  }
-
-  // Stop listening and generate model response
-  Future<void> _stopListening() async {
-    setState(() {
-      _isListening = false;
-    });
-    await _speechToText.stop();
-
-    if (_spokenText.trim().isNotEmpty && _modelLoaded) {
-      // Check if text was detected
-      _generateText(_spokenText);
-    } else if (_spokenText.trim().isEmpty) {
-      _showSnackBar(
-          "No speech detected."); // Notify user if no speech was detected
-    } else if (!_modelLoaded) {
-      _showSnackBar("Model not loaded.");
-    }
-  }
-
-  // Generate text using the model
   Future<void> _generateText(String spokenText) async {
     setState(() {
-      _isLoading = true;
-      _responseText = "Generating response...";
+      _isLoading = true; // Show loading animation
     });
 
-    try {
-      String result = '';
-      final generatedTextStream = _llamaHelper.generateText(spokenText);
+    AiHelpers.generateText(
+      spokenText,
+      _llamaHelper,
+      ChatHistory(),
+      (response) {
+        setState(() {
+          _responseText = response;
+          _isLoading = false; // Hide loading animation
+          _isSpeaking = true; // Start speaking animation
+        });
 
-      _generationSubscription = generatedTextStream.listen(
-        (chunk) {
-          result += chunk;
-          setState(() {
-            _responseText = result;
-          });
-        },
-        onError: (error) {
-          print("Error generating text: $error");
-          _showSnackBar("Error generating text: $error");
-        },
-        onDone: () async {
-          print("Generation complete");
-          chatHistory.addMessage(role: Role.assistant, content: result);
-          await _speakResponse(result);
-          setState(() {
-            _isLoading = false;
-          });
-        },
-      );
-    } catch (e) {
-      print("Error generating text: $e");
-      _showSnackBar("Error generating text: $e");
-      setState(() {
-        _isLoading = false;
-      });
-    }
+        _speakResponse(response); // Speak the response
+      },
+      (error) {
+        AiHelpers.showSnackBar(context, error);
+      },
+    );
   }
 
-  // Speak the generated response
-  Future<void> _speakResponse(String response) async {
-    setState(() {
-      _isSpeaking = true;
-    });
-    await _flutterTts.speak(response);
-    _flutterTts.setCompletionHandler(() {
-      setState(() {
-        _isSpeaking = false;
-      });
-    });
-  }
-
-  // Show a snackbar message
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+  // Speak the response text
+  Future<void> _speakResponse(String text) async {
+    await _flutterTts.setLanguage("en-US"); // Set language to English
+    await _flutterTts.setSpeechRate(0.5); // Set a slower speech rate
+    await _flutterTts.speak(text); // Speak the response
   }
 
   // Build the animation circle based on state
@@ -322,12 +215,60 @@ class _TalkPageState extends State<TalkPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _generationSubscription?.cancel();
-    _speechToText.stop();
-    _flutterTts.stop();
-    super.dispose();
+  // Start listening
+  Future<void> _startListening() async {
+    setState(() {
+      _isListening = true;
+      _spokenText = '';
+    });
+
+    bool available = await _speechToText.initialize();
+    if (available) {
+      await _speechToText.listen(
+        onResult: (result) {
+          setState(() {
+            _spokenText = result.recognizedWords;
+          });
+          _resetSpeechTimeout(); // Reset the timer on speech
+        },
+        onSoundLevelChange: (level) {
+          _resetSpeechTimeout(); // Reset the timer on sound
+        },
+      );
+      _resetSpeechTimeout(); // Start the timer initially
+    } else {
+      AiHelpers.showSnackBar(context, "Speech recognition is not available.");
+      setState(() {
+        _isListening = false;
+      });
+    }
+  }
+
+  void _resetSpeechTimeout() {
+    if (_speechTimeout != null && _speechTimeout!.isActive) {
+      _speechTimeout!.cancel();
+    }
+    _speechTimeout = Timer(const Duration(seconds: 3), () {
+      if (_isListening) {
+        _stopListening();
+      }
+    });
+  }
+
+  // Stop listening and generate model response
+  Future<void> _stopListening() async {
+    setState(() {
+      _isListening = false;
+    });
+    await _speechToText.stop();
+    if (_spokenText.trim().isNotEmpty) {
+      _generateText(_spokenText);
+    } else {
+      AiHelpers.showSnackBar(context, "No speech detected.");
+    }
+    if (_speechTimeout != null && _speechTimeout!.isActive) {
+      _speechTimeout!.cancel();
+    }
   }
 
   @override
@@ -355,9 +296,8 @@ class _TalkPageState extends State<TalkPage> {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildCircleAnimation(),
+            _buildCircleAnimation(), // Add the animation circle here
             const SizedBox(height: 20),
             Text(
               _spokenText,
@@ -372,5 +312,14 @@ class _TalkPageState extends State<TalkPage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _animationTimer?.cancel();
+    _speechToText.stop();
+    _flutterTts.stop(); // Stop any ongoing speech
+    _speechTimeout?.cancel();
+    super.dispose();
   }
 }
