@@ -46,7 +46,6 @@ class LlamaHelper {
 
       final llamaParent = LlamaParent(loadCommand);
       await llamaParent.init(); // Initialize here, but don't store
-
       _modelLoaded = true;
 
       String initialPrompt =
@@ -68,6 +67,8 @@ class LlamaHelper {
       chatHistory.addMessage(role: Role.system, content: initialPrompt);
 
       print("LlamaHelper.loadModel: Model loaded successfully");
+      llamaParent
+          .dispose(); // since we are not using it and it has been verified that the model can be loaded
     } catch (e) {
       print("LlamaHelper.loadModel: Error loading model: $e");
       rethrow;
@@ -82,6 +83,8 @@ class LlamaHelper {
 
     chatHistory.addMessage(role: Role.user, content: prompt);
     final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+
+    // final formattedPrompt = _chatMLFormat.formatPrompt(prompt);
     print('Formatted User Prompt: $formattedPrompt');
 
     final _contextParams = ContextParams();
