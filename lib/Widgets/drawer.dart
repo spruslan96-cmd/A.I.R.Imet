@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:local_ai_chat/Screens/chat_page.dart';
 import 'package:local_ai_chat/Screens/manage_models.dart';
-import 'package:local_ai_chat/Screens/model_check_page.dart';
+import 'package:local_ai_chat/Screens/model_download.dart';
 import 'package:local_ai_chat/Screens/talk_page.dart';
 
 class Hamburger extends StatelessWidget {
