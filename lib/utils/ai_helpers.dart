@@ -36,6 +36,25 @@ class AiHelpers {
     }
   }
 
+  static Future<void> loadVoiceModel(
+      String modelFileName,
+      LlamaHelper llamaHelper,
+      bool modelLoaded,
+      Function(bool, String) onModelLoading,
+      Function(String) onError) async {
+    if (modelLoaded) return;
+
+    onModelLoading(true, "Loading Model...");
+    try {
+      await llamaHelper.loadModel(modelFileName);
+      onModelLoading(false, "");
+    } catch (e) {
+      print("Error loading model: $e");
+      onModelLoading(false, "");
+      onError("Error loading model: $e");
+    }
+  }
+
   static Future<void> generateText(
       String prompt,
       LlamaHelper llamaHelper,
@@ -44,7 +63,7 @@ class AiHelpers {
       Function(String) onError) async {
     String result = '';
     try {
-      final generatedTextStream = llamaHelper.generateText(prompt);
+      final generatedTextStream = await llamaHelper.generateText(prompt);
       generatedTextStream.listen(
         (chunk) {
           result += chunk;
@@ -73,7 +92,7 @@ class AiHelpers {
       Function(String) onError) async {
     String result = '';
     try {
-      final generatedVoiceStream = llamaHelper.generateVoice(prompt);
+      final generatedVoiceStream = await llamaHelper.generateText(prompt);
       generatedVoiceStream.listen(
         (chunk) {
           result += chunk;
