@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_ai_chat/Screens/chat_page.dart';
 import 'package:local_ai_chat/Screens/manage_models.dart';
 import 'package:local_ai_chat/Screens/model_download.dart';
+import 'package:local_ai_chat/Screens/settings_page.dart';
 import 'package:local_ai_chat/Screens/talk_page.dart';
 
 class Hamburger extends StatelessWidget {
@@ -54,6 +55,15 @@ class Hamburger extends StatelessWidget {
               }));
             },
             child: Text('Model Manage'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (BuildContext context) {
+                return const SettingsPage();
+              }));
+            },
+            child: Text('Settings'),
           ),
         ],
       ),
