@@ -30,6 +30,7 @@ class _TalkPageState extends State<TalkPage> {
   Timer? _animationTimer;
   double _circleRadius = 150.0;
   Timer? _speechTimeout; // Add a timer
+  late ThemeData theme;
 
   @override
   void initState() {
@@ -51,7 +52,7 @@ class _TalkPageState extends State<TalkPage> {
   }
 
   Future<void> _loadModel(String modelFileName) async {
-    AiHelpers.loadModel(
+    AiHelpers.loadVoiceModel(
       modelFileName,
       _llamaHelper,
       _modelLoaded,
@@ -122,14 +123,14 @@ class _TalkPageState extends State<TalkPage> {
         duration: const Duration(milliseconds: 300),
         width: 150,
         height: 150,
-        decoration: const BoxDecoration(
-          color: Colors.blueAccent,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary,
           shape: BoxShape.circle,
         ),
         child: Center(
           child: Icon(
             _isListening ? Icons.mic : Icons.mic_none,
-            color: Colors.white,
+            color: theme.colorScheme.onPrimary,
             size: 50,
           ),
         ),
@@ -165,8 +166,8 @@ class _TalkPageState extends State<TalkPage> {
         width: _circleRadius,
         height: _circleRadius,
         decoration: BoxDecoration(
-          color:
-              Colors.blueAccent.withOpacity(0.2), // Lighter shade for pulsation
+          color: theme.colorScheme.primary
+              .withOpacity(0.2), // Lighter shade for pulsation
           shape: BoxShape.circle,
         ),
       ),
@@ -179,13 +180,13 @@ class _TalkPageState extends State<TalkPage> {
       duration: const Duration(milliseconds: 300),
       width: 150,
       height: 150,
-      decoration: const BoxDecoration(
-        color: Colors.blueAccent,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary,
         shape: BoxShape.circle,
       ),
-      child: const Center(
+      child: Center(
         child: CircularProgressIndicator(
-          color: Colors.white,
+          color: theme.colorScheme.onPrimary,
         ),
       ),
     );
@@ -197,17 +198,17 @@ class _TalkPageState extends State<TalkPage> {
       duration: const Duration(milliseconds: 300),
       width: 150,
       height: 150,
-      decoration: const BoxDecoration(
-        color: Colors.blueAccent,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary,
         shape: BoxShape.circle,
       ),
-      child: const Center(
+      child: Center(
         child: AnimatedScale(
           scale: 1.1,
-          duration: Duration(milliseconds: 500),
+          duration: const Duration(milliseconds: 500),
           child: Icon(
             Icons.volume_up,
-            color: Colors.white,
+            color: theme.colorScheme.onPrimary,
             size: 50,
           ),
         ),
@@ -273,23 +274,45 @@ class _TalkPageState extends State<TalkPage> {
 
   @override
   Widget build(BuildContext context) {
+    theme = Theme.of(context);
+    String displayResponse = _responseText.length >= 150
+        ? '${_responseText.substring(0, 150)}...'
+        : _responseText;
+
     return Scaffold(
       drawer: const Hamburger(),
       appBar: AppBar(
-        title: const Text("Talk to AI"),
+        title: const Text("Talk"),
         actions: [
-          DropdownButton<String>(
-            value: _selectedModel,
-            hint: const Text("Select Model"),
-            items: _availableModels
-                .map((modelPath) => DropdownMenuItem<String>(
-                    value: modelPath, child: Text(modelPath.split('/').last)))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                _loadModel(value);
-              }
-            },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: DropdownButton<String>(
+              value: _selectedModel,
+              hint: const Text("Select Model"),
+              items: _availableModels.map((modelPath) {
+                return DropdownMenuItem<String>(
+                  value: modelPath,
+                  child: Text(
+                    modelPath.split('/').last,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: theme.colorScheme.onBackground,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  _loadModel(value);
+                }
+              },
+              style: TextStyle(color: theme.colorScheme.onBackground),
+              underline: Container(
+                height: 1,
+                color: theme.colorScheme.onBackground,
+              ),
+            ),
           ),
         ],
       ),
@@ -297,17 +320,64 @@ class _TalkPageState extends State<TalkPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildCircleAnimation(), // Add the animation circle here
+            Expanded(
+              flex: 2,
+              child: _buildCircleAnimation(),
+            ), // Add the animation circle here
             const SizedBox(height: 20),
-            Text(
-              _spokenText,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    if (_spokenText.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 4, horizontal: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _spokenText,
+                            style:
+                                TextStyle(color: theme.colorScheme.onPrimary),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(
+                      height: 10,
+                    ),
+                    if (displayResponse.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 4, horizontal: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceVariant,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            displayResponse,
+                            style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            Text(
-              _responseText,
-              style: const TextStyle(fontSize: 16),
-            ),
+            // Text(
+            //   _responseText,
+            //   style: const TextStyle(fontSize: 16),
+            // ),
           ],
         ),
       ),
@@ -316,6 +386,7 @@ class _TalkPageState extends State<TalkPage> {
 
   @override
   void dispose() {
+    _llamaHelper.dispose();
     _animationTimer?.cancel();
     _speechToText.stop();
     _flutterTts.stop(); // Stop any ongoing speech
