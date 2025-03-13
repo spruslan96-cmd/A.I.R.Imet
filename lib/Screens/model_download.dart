@@ -1,9 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:local_ai_chat/Screens/chat_page.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
-import 'package:local_ai_chat/Widgets/model_card.dart';
+import 'package:local_ai_chat/Widgets/download_model_card.dart';
+import 'package:local_ai_chat/Widgets/now_downloading_card.dart';
+import 'package:local_ai_chat/Widgets/downloaded_model_card.dart';
+import 'package:local_ai_chat/Widgets/search_bar.dart';
 import 'package:local_ai_chat/utils/download_api.dart';
+import 'package:path_provider/path_provider.dart'; // Add this import
+import 'dart:io'; // Add this import
 
 class ModelCheckPage extends StatefulWidget {
   const ModelCheckPage({super.key});
@@ -22,14 +26,15 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
   Map<String, double> _downloadProgressMap = {};
   Map<String, int?> _modelSizes = {};
   bool _modelsLoaded = false;
+  List<FileSystemEntity> _downloadedModels = []; // List of downloaded models
 
-  final DownloadAPI _downloadAPI =
-      DownloadAPI(); // Initialize the DownloadAPI instance
+  final DownloadAPI _downloadAPI = DownloadAPI();
 
   @override
   void initState() {
     super.initState();
     _fetchAvailableModels();
+    _fetchDownloadedModels(); // Fetch downloaded models
   }
 
   Future<void> _fetchAvailableModels() async {
@@ -42,11 +47,8 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
 
     try {
       final dio = Dio();
-
-      // Initial filtering (gguf, conversational, and other relevant tags)
       final modelsUrl =
-          "https://huggingface.co/api/models?filter=gguf,conversational&full=true"; // Add other relevant filters
-
+          "https://huggingface.co/api/models?filter=gguf,conversational&full=true";
       final modelsResponse = await dio.get(modelsUrl);
 
       if (modelsResponse.statusCode != 200) {
@@ -56,11 +58,8 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
 
       _availableModels = modelsResponse.data as List<dynamic>;
 
-      // Additional filtering (after fetching):
       _filteredModels = _availableModels.where((model) {
         final modelName = model['id'] as String;
-
-        // Quantization keywords (add more as needed)
         final quantizedKeywords = [
           "quantized",
           "q4",
@@ -68,34 +67,25 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
           "q8",
           "int8",
           "int4",
-          "ggml", // Older quantization format
-          "llama-q", // Often indicates quantized Llama models
+          "ggml",
+          "llama-q"
         ];
-
-        // Check if the model name contains any of the quantization keywords
         final isQuantized = quantizedKeywords
             .any((keyword) => modelName.toLowerCase().contains(keyword));
+        bool hasQuantizationTag = model['tags'] != null &&
+            model['tags'] is List<dynamic> &&
+            (model['tags'] as List<dynamic>).any(
+                (tag) => tag.toString().toLowerCase().contains("quantized"));
 
-        // Check for specific tags related to quantization (if available)
-        bool hasQuantizationTag = false;
-        if (model['tags'] != null && model['tags'] is List<dynamic>) {
-          hasQuantizationTag = (model['tags'] as List<dynamic>)
-              .any((tag) => tag.toString().toLowerCase().contains("quantized"));
-        }
-
-        // Check model name for keywords (llama, ggml, etc.)
         if (modelName.toLowerCase().contains('llama') ||
             modelName.toLowerCase().contains('ggml')) {
-          return isQuantized ||
-              hasQuantizationTag; // Only include quantized models
+          return isQuantized || hasQuantizationTag;
         }
-
-        return false; // Exclude models that don't match criteria
+        return false;
       }).toList();
 
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         for (final model in _filteredModels) {
-          // Iterate over _filteredModels
           final modelName = model['id'];
           final exists = await _downloadAPI.checkModelExists(modelName);
           final modelSize = await _downloadAPI.fetchModelSize(modelName);
@@ -107,6 +97,7 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
             });
           }
         }
+
         _sortModels();
         if (mounted) {
           setState(() {
@@ -126,36 +117,65 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
     }
   }
 
+  // Fetch all downloaded models from the local storage directory
+  Future<void> _fetchDownloadedModels() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Get the local directory where models are stored
+      final directory = await getApplicationDocumentsDirectory();
+      final modelDirectory = Directory(directory.path);
+
+      // List all files in the directory
+      final files = modelDirectory.listSync();
+
+      // Filter for the models that are downloaded (based on file extension or name pattern)
+      final downloadedModels = files.where((file) {
+        return file.path.endsWith(".gguf"); // Filter for .gguf files
+      }).toList();
+
+      setState(() {
+        _downloadedModels = downloadedModels;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Error fetching downloaded models: $e";
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   void _filterModels(String query) {
     setState(() {
       _searchQuery = query;
-      _filteredModels = _availableModels
-          .where((model) => model['id']
-              .toString()
-              .toLowerCase()
-              .contains(query.toLowerCase()))
-          .toList();
+      _filteredModels = _availableModels.where((model) {
+        return model['id']
+            .toString()
+            .toLowerCase()
+            .contains(query.toLowerCase());
+      }).toList();
       _sortModels();
     });
   }
 
   void _sortModels() {
-    _filteredModels.sort((a, b) {
-      final aExists = _modelExistsMap[a['id']] ?? false;
-      final bExists = _modelExistsMap[b['id']] ?? false;
-
-      if (aExists && !bExists) {
-        return -1;
-      } else if (!aExists && bExists) {
-        return 1;
-      } else {
-        return 0;
-      }
+    setState(() {
+      _filteredModels = _availableModels.where((model) {
+        final modelName = model['id'];
+        return !_downloadProgressMap.containsKey(modelName);
+      }).toList();
     });
   }
 
   Future<void> _downloadModel(String modelName) async {
-    _downloadProgressMap[modelName] = 0.0;
+    setState(() {
+      _downloadProgressMap[modelName] = 0.0;
+    });
 
     try {
       await _downloadAPI.downloadModel(modelName, (progress) {
@@ -167,89 +187,135 @@ class _ModelCheckPageState extends State<ModelCheckPage> {
       final exists = await _downloadAPI.checkModelExists(modelName);
       setState(() {
         _modelExistsMap[modelName] = exists;
+        _downloadProgressMap.remove(modelName);
       });
 
       _sortModels();
     } catch (e) {
-      _errorMessage = "Error downloading model: $e";
-      _downloadProgressMap[modelName] = 0.0;
+      setState(() {
+        _errorMessage = "Error downloading model: $e";
+        _downloadProgressMap.remove(modelName);
+      });
     }
   }
 
   Future<void> _deleteModel(String modelName) async {
     try {
-      await _downloadAPI.deleteModel(modelName);
+      // Remove the model file from local storage
+      final directory = await getApplicationDocumentsDirectory();
+      final modelFile = File('${directory.path}/$modelName');
+      if (await modelFile.exists()) {
+        await modelFile.delete();
+      }
+
+      // Remove the model from the _downloadedModels list
       setState(() {
-        _modelExistsMap[modelName] = false;
-        _sortModels();
+        _downloadedModels
+            .removeWhere((file) => file.uri.pathSegments.last == modelName);
+        _modelExistsMap[modelName] = false; // Mark as not existing
+        _sortModels(); // Re-sort models after deletion
       });
     } catch (e) {
       print("Error deleting model: $e");
     }
   }
 
+  Future<void> _cancelDownload(String modelName) async {
+    await _downloadAPI.cancelDownload(modelName);
+    if (mounted) {
+      setState(() {
+        _downloadProgressMap.remove(modelName);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: Hamburger(),
-      appBar: AppBar(
-        title: const Text("Model Check"),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60.0),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              onChanged: _filterModels,
-              decoration: InputDecoration(
-                hintText: "Search models...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(),
-                suffix: IconButton(
-                  onPressed: () {
-                    if (mounted) {
-                      setState(() {
-                        _filteredModels = [];
-                        _searchQuery = '';
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.clear),
+    List<dynamic> downloadingModels = _downloadProgressMap.keys.toList();
+    List<dynamic> downloadedModels = _modelExistsMap.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+    List<dynamic> browseModels = _filteredModels.where((model) {
+      String modelName = model['id'];
+      return !downloadingModels.contains(modelName) &&
+          !downloadedModels.contains(modelName);
+    }).toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        drawer: Hamburger(),
+        appBar: AppBar(
+          title: const Text("Model Manager"),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(100.0),
+            child: Column(
+              children: [
+                SearchBarWidget(onSearch: _filterModels),
+                const TabBar(
+                  tabs: [
+                    Tab(text: "Browse Models"),
+                    Tab(text: "Now Downloading"),
+                    Tab(text: "Downloaded Models"),
+                  ],
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      ),
-      body: Center(
-        child: _isLoading
-            ? const CircularProgressIndicator()
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
             : _errorMessage.isNotEmpty
-                ? Text("Error: $_errorMessage")
-                : _filteredModels.isNotEmpty
-                    ? ListView.builder(
-                        itemCount: _filteredModels.length,
-                        itemBuilder: (context, index) {
-                          final model = _filteredModels[index];
-                          final modelName = model['id'];
-                          final modelExists =
-                              _modelExistsMap[modelName] ?? false;
-                          final progress =
-                              _downloadProgressMap[modelName] ?? 0.0;
-                          final modelSize = _modelSizes[modelName];
-
-                          return ModelCard(
-                            model: model,
-                            onDownload: _downloadModel,
-                            modelExists: modelExists,
-                            downloadProgress: progress,
-                            modelSize: modelSize,
-                            onDelete: _deleteModel,
-                          );
-                        },
-                      )
-                    : const Text(
-                        "No models found. Please check your internet connection."),
+                ? Center(child: Text("Error: $_errorMessage"))
+                : TabBarView(
+                    children: [
+                      _buildBrowseModels(browseModels), // Browse Models
+                      _buildDownloadingModels(
+                          downloadingModels), // Now Downloading
+                      _buildDownloadedModels(
+                          _downloadedModels), // Downloaded Models (updated)
+                    ],
+                  ),
       ),
+    );
+  }
+
+  Widget _buildBrowseModels(List<dynamic> models) {
+    return ListView(
+      children: models.map((model) {
+        return DownloadModelCard(
+          model: model,
+          modelSize: _modelSizes[model['id']],
+          onDownload: _downloadModel,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDownloadingModels(List<dynamic> models) {
+    return ListView(
+      children: models.map((modelName) {
+        return NowDownloadingCard(
+          model: {'id': modelName},
+          downloadProgress: _downloadProgressMap[modelName] ?? 0.0,
+          modelSize: _modelSizes[modelName],
+          onCancelDownload: _cancelDownload,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDownloadedModels(List<FileSystemEntity> models) {
+    return ListView(
+      children: models.map((file) {
+        final modelName = file.uri.pathSegments.last; // Extract model name
+        return DownloadedModelCard(
+          model: {'id': modelName},
+          modelSize: file.statSync().size,
+          onDelete: _deleteModel,
+        );
+      }).toList(),
     );
   }
 }
