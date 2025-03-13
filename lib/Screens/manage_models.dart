@@ -1,6 +1,9 @@
+// manage_models.dart
+
 import 'package:flutter/material.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
 import 'package:local_ai_chat/Widgets/model_card.dart';
+import 'package:local_ai_chat/utils/download_api.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
@@ -60,25 +63,7 @@ class _ManageModelsPageState extends State<ManageModelsPage> {
   // Delete a model from local storage
   Future<void> _deleteModel(String modelPath) async {
     try {
-      // Create the File object using the path
-      final file = File(modelPath);
-
-      // Check if the file exists before attempting to delete
-      if (await file.exists()) {
-        await file.delete();
-        // After deleting, update the list and UI
-        setState(() {
-          _downloadedModels.removeWhere((model) => model.path == modelPath);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Model deleted successfully")),
-        );
-      } else {
-        // If the file doesn't exist, show a message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Model not found")),
-        );
-      }
+      DownloadAPI().deleteModel(modelPath);
     } catch (e) {
       // Handle any errors during deletion
       print("Error deleting model: $e");
