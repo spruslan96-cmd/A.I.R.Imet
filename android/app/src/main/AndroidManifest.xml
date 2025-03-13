@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:label="local_ai_chat"
+        android:label="A.I.R.I"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
