@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 class ModelCard extends StatefulWidget {
   final dynamic model;
   final Function(String) onDownload;
-  final Function(String)? onCancelDownload; // Made optional
-  final Function(String) onDelete;
+  final Function(String)? onCancelDownload;
+  final Function onDelete;
   final bool modelExists;
   final double downloadProgress;
   final int? modelSize;
@@ -13,7 +13,7 @@ class ModelCard extends StatefulWidget {
     Key? key,
     required this.model,
     required this.onDownload,
-    this.onCancelDownload, // Optional now
+    this.onCancelDownload,
     required this.onDelete,
     required this.modelExists,
     required this.downloadProgress,
@@ -27,11 +27,23 @@ class ModelCard extends StatefulWidget {
 class _ModelCardState extends State<ModelCard> {
   bool _isDownloading = false;
 
+  @override
+  void didUpdateWidget(covariant ModelCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If download progress is complete, reset the downloading state
+    if (widget.downloadProgress >= 1.0) {
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
   void _cancelDownload() {
     if (widget.onCancelDownload != null) {
-      widget.onCancelDownload!(widget.model['id']); // Call if available
+      widget.onCancelDownload!(widget.model['id']);
       setState(() {
-        _isDownloading = false; // Reset state
+        _isDownloading = false; // Reset download state when canceled
       });
     }
   }
@@ -49,7 +61,7 @@ class _ModelCardState extends State<ModelCard> {
       ),
       child: Stack(
         children: [
-          // Green progress bar
+          // Green progress bar (fills as download progresses)
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -67,6 +79,7 @@ class _ModelCardState extends State<ModelCard> {
               ),
             ),
           ),
+
           // Foreground content
           ListTile(
             title: Text(widget.model['id']),
@@ -80,11 +93,11 @@ class _ModelCardState extends State<ModelCard> {
                         onPressed: () {
                           widget.onDelete(widget.model['id']);
                         },
-                        icon: const Icon(Icons.delete),
+                        icon: const Icon(Icons.delete, color: Colors.red),
                       ),
                     ],
                   )
-                : _isDownloading
+                : _isDownloading || widget.downloadProgress > 0.0
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -97,8 +110,7 @@ class _ModelCardState extends State<ModelCard> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (widget.onCancelDownload !=
-                              null) // Show only if available
+                          if (widget.onCancelDownload != null)
                             IconButton(
                               onPressed: _cancelDownload,
                               icon: const Icon(Icons.close, color: Colors.red),
