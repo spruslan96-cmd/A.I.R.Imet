@@ -1,205 +1,175 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
+import 'package:dio/dio.dart';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:local_ai_chat/models/chat_format.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
-
-import 'package:llama_cpp_dart/llama_cpp_dart.dart' as llama;
 
 class LlamaHelper {
   bool _modelLoaded = false;
   final ChatMLFormat _chatMLFormat = ChatMLFormat();
   final chatHistory = ChatHistory();
   String? modelPath;
-  String? voiceModelPath; // Add a path for the voice model
+  SendPort? _isolateSendPort;
+  Isolate? _isolate;
 
-  // Load available models
   Future<List<String>> loadAvailableModels() async {
     final directory = await getApplicationDocumentsDirectory();
     final files = directory.listSync();
-
     return files
         .where((file) => file is File && file.path.endsWith('.gguf'))
         .map((file) => file.path)
         .toList();
   }
 
-  // Load the main model
   Future<void> loadModel(String modelFileName) async {
     if (_modelLoaded) return;
-
     modelPath = await getModelPath(modelFileName);
     print('MODEL PATH GOT AS: $modelPath');
 
-    final _contextParams = ContextParams();
-    _contextParams.nCtx = 1024;
-    _contextParams.nPredit = 512;
+    final receivePort = ReceivePort();
+    _isolate = await Isolate.spawn(_modelIsolate, receivePort.sendPort);
+    _isolateSendPort = await receivePort.first as SendPort;
 
-    try {
-      final loadCommand = llama.LlamaLoad(
-        path: modelPath!,
-        modelParams: ModelParams(),
-        contextParams: _contextParams,
-        samplingParams: SamplerParams(),
-        format: _chatMLFormat,
-      );
+    final modelInitPort = ReceivePort();
+    _isolateSendPort!
+        .send({'modelPath': modelPath, 'sendPort': modelInitPort.sendPort});
+    await modelInitPort.first; // Wait for model to be initialized
 
-      final llamaParent = LlamaParent(loadCommand);
-      await llamaParent.init(); // Initialize here, but don't store
-      _modelLoaded = true;
-
-      String initialPrompt =
-          """ You are a highly capable and versatile AI assistant designed to assist users in a wide range of tasks. Your main objective is to provide clear, accurate, and helpful information in a friendly and approachable manner. You should always aim to be polite, empathetic, and solution-oriented, offering explanations or assistance as needed.
- Your primary strengths include:
- 1. **Information retrieval and explanations**: You can provide well-researched, concise, and easy-to-understand explanations across various topics, including technology, science, literature, mathematics, and more.
- 2. **Task automation and troubleshooting**: You can assist with performing tasks, solving problems, and offering step-by-step guidance to troubleshoot issues or provide instructions.
- 3. **Conversational interaction**: You can engage in casual conversation, maintaining a friendly tone while also adapting to the user’s communication style. Always be respectful and patient.
- 4. **Personalized assistance**: You can make recommendations or offer tailored advice based on user preferences or requirements when appropriate, while respecting privacy and ensuring security.
- While responding, please adhere to the following guidelines:
- - **Be accurate and thorough**: Ensure the information you provide is correct and up-to-date. If you're unsure about something, be transparent and offer suggestions for further exploration.
- - **Stay neutral and non-judgmental**: Avoid biases and ensure that all responses are objective, respecting different viewpoints, cultures, and opinions.
- - **Be concise but informative**: Try to provide clear, actionable answers without overwhelming the user with unnecessary details.
- - **Use a positive, friendly tone**: Always aim to be approachable and kind, even when delivering complex or challenging information.
- If you encounter a question or topic you are not able to answer, gently guide the user by suggesting alternative ways to gather the information or offering your best guess based on what you know. However, always prioritize honesty and clarity.
-  Your role is to empower users by making their tasks easier, providing valuable insights, and helping them solve problems effectively.
- """;
-
-      chatHistory.addMessage(role: Role.system, content: initialPrompt);
-
-      print("LlamaHelper.loadModel: Model loaded successfully");
-      llamaParent
-          .dispose(); // since we are not using it and it has been verified that the model can be loaded
-    } catch (e) {
-      print("LlamaHelper.loadModel: Error loading model: $e");
-      rethrow;
-    }
+    _modelLoaded = true;
   }
 
-  // Generate text output
-  Stream<String> generateText(String prompt) async* {
-    if (!_modelLoaded || modelPath == null) {
-      throw Exception('Model not loaded or model path not set');
+  Future<Stream<String>> generateText(String prompt) async {
+    if (!_modelLoaded || _isolateSendPort == null) {
+      throw Exception('Model not loaded or isolate not initialized');
     }
 
-    chatHistory.addMessage(role: Role.user, content: prompt);
-    final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+    final responseStream = StreamController<String>();
+    final receivePort = ReceivePort();
 
-    // final formattedPrompt = _chatMLFormat.formatPrompt(prompt);
-    print('Formatted User Prompt: $formattedPrompt');
+    _isolateSendPort!
+        .send({'prompt': prompt, 'sendPort': receivePort.sendPort});
 
-    final _contextParams = ContextParams();
-    _contextParams.nCtx = 1024;
-    _contextParams.nPredit = 512;
-
-    final loadCommand = llama.LlamaLoad(
-      path: modelPath!,
-      modelParams: ModelParams(),
-      contextParams: _contextParams,
-      samplingParams: SamplerParams(),
-      format: _chatMLFormat,
-    );
-
-    final llamaParent = LlamaParent(loadCommand);
-    await llamaParent.init();
-
-    llamaParent.sendPrompt(formattedPrompt);
-
-    String currentResponse = '';
-
-    try {
-      await for (final chunk in llamaParent.stream) {
-        final filteredChunk = _chatMLFormat.filterResponse(chunk);
-        if (filteredChunk != null) {
-          currentResponse += filteredChunk; // Accumulate for history
-          yield filteredChunk; // Yield immediately for word-by-word display
-        }
+    receivePort.listen((message) {
+      if (message is String) {
+        responseStream.add(message);
+      } else if (message == 'done') {
+        responseStream.close();
       }
-    } catch (e) {
-      print("Error during generation: $e");
-    } finally {
-      llamaParent.dispose();
-      chatHistory.addMessage(role: Role.assistant, content: currentResponse);
-    }
+    });
+
+    return responseStream.stream;
   }
 
-  // Generate voice response (for lighter model)
-  Stream<String> generateVoice(String spokenText) async* {
-    if (!_modelLoaded || voiceModelPath == null) {
-      throw Exception('Voice model not loaded or voice model path not set');
-    }
+  void _modelIsolate(SendPort sendPort) async {
+    final receivePort = ReceivePort();
+    sendPort.send(receivePort.sendPort);
 
-    chatHistory.addMessage(role: Role.user, content: spokenText);
-    final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
-    print('Formatted User Prompt (Voice): $formattedPrompt');
+    String? modelPath;
+    Llama? llamaInstance;
+    final systemPrompt = """
+    Your Name is A.I.R.I, Today's date = ${DateTime.now()} You must adhere to the following rules:
+    You are a highly capable and versatile AI assistant designed to assist users in a wide range of tasks. Your main objective is to provide clear, accurate, and helpful information in a friendly and approachable manner. You should always aim to be polite, empathetic, and solution-oriented, offering explanations or assistance as needed.
 
-    // Assuming voice model uses similar parameters but for a lighter model
-    final _contextParams = ContextParams();
-    _contextParams.nCtx = 512; // Lighter model, less context
-    _contextParams.nPredit = 256; // Smaller prediction size
+    Your primary strengths include:
+    1. **Information retrieval and explanations**: You can provide well-researched, concise, and easy-to-understand explanations across various topics, including technology, science, literature, mathematics, and more.
+    2. **Task automation and troubleshooting**: You can assist with performing tasks, solving problems, and offering step-by-step guidance to troubleshoot issues or provide instructions.
+    3. **Conversational interaction**: You can engage in casual conversation, maintaining a friendly tone while also adapting to the user’s communication style. Always be respectful and patient.
+    4. **Personalized assistance**: You can make recommendations or offer tailored advice based on user preferences or requirements when appropriate, while respecting privacy and ensuring security.
 
-    final loadCommand = llama.LlamaLoad(
-      path: voiceModelPath!,
-      modelParams: ModelParams(),
-      contextParams: _contextParams,
-      samplingParams: SamplerParams(),
-      format: _chatMLFormat,
-    );
+    While responding, please adhere to the following guidelines:
+    - **Be accurate and thorough**: Ensure the information you provide is correct and up-to-date. If you're unsure about something, be transparent and offer suggestions for further exploration.
+    - **Stay neutral and non-judgmental**: Avoid biases and ensure that all responses are objective, respecting different viewpoints, cultures, and opinions.
+    - **Be concise but informative**: Try to provide clear, actionable answers without overwhelming the user with unnecessary details.
+    - **Use a positive, friendly tone**: Always aim to be approachable and kind, even when delivering complex or challenging information.
 
-    final llamaParent = LlamaParent(loadCommand);
-    await llamaParent.init();
+    If you encounter a question or topic you are not able to answer, gently guide the user by suggesting alternative ways to gather the information or offering your best guess based on what you know. However, always prioritize honesty and clarity.
 
-    llamaParent.sendPrompt(formattedPrompt);
+    Your role is to empower users by making their tasks easier, providing valuable insights, and helping them solve problems effectively.
+    """;
 
-    String currentResponse = '';
+    await for (final message in receivePort) {
+      if (message is Map && message.containsKey('modelPath')) {
+        modelPath = message['modelPath'];
+        final clientSendPort = message['sendPort'] as SendPort;
+        final _contextParams = ContextParams();
+        _contextParams.nCtx = 2048;
+        _contextParams.nBatch = 1024;
+        _contextParams.nPredit = 1024;
 
-    try {
-      await for (final chunk in llamaParent.stream) {
-        final filteredChunk = _chatMLFormat.filterResponse(chunk);
-        if (filteredChunk != null) {
-          currentResponse += filteredChunk; // Accumulate for history
-          yield filteredChunk; // Yield immediately for word-by-word display
+        final _samplerParams = SamplerParams();
+        final _modelParams = ModelParams();
+
+        try {
+          Llama.libraryPath = "libllama.so";
+          llamaInstance = Llama(
+            modelPath!,
+            _modelParams,
+            _contextParams,
+            _samplerParams,
+          );
+
+          //add system prompt to chat history.
+          final chatHistory = ChatHistory();
+          chatHistory.addMessage(role: Role.system, content: systemPrompt);
+
+          print("Model loaded successfully in isolate.");
+          clientSendPort.send('ready');
+        } catch (e) {
+          print("Error loading model in isolate: $e");
+          clientSendPort.send('error: $e');
         }
+      } else if (message is Map && message.containsKey('prompt')) {
+        final prompt = message['prompt'] as String;
+        final clientSendPort = message['sendPort'] as SendPort;
+
+        if (llamaInstance == null) {
+          clientSendPort.send('error: Model not initialized');
+          clientSendPort.send('done');
+          continue;
+        }
+        String response = '';
+        try {
+          print('User prompt = $prompt');
+          chatHistory.addMessage(role: Role.user, content: prompt);
+          final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+          llamaInstance.setPrompt(formattedPrompt);
+
+          final responseBuffer = StringBuffer();
+
+          final responseStream = llamaInstance.generateText();
+          await responseStream.forEach((item) {
+            response += item;
+            clientSendPort.send(item);
+            responseBuffer.write(item);
+          }).whenComplete(() {
+            clientSendPort.send(' done');
+          });
+          print('ai response = $response');
+        } catch (e) {
+          print("Error generating in isolate: $e");
+          clientSendPort.send('error: $e');
+        }
+      } else if (message == 'dispose') {
+        llamaInstance?.dispose();
+        receivePort.close();
+        break;
       }
-    } catch (e) {
-      print("Error during voice generation: $e");
-    } finally {
-      llamaParent.dispose();
-      chatHistory.addMessage(role: Role.assistant, content: currentResponse);
     }
   }
 
-  // Get the model path
+  void dispose() {
+    _isolateSendPort?.send('dispose');
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+
+    _isolateSendPort = null;
+    _modelLoaded = false;
+  }
+
   Future<String> getModelPath(String modelFileName) async {
     return '$modelFileName';
-  }
-
-  // Load the voice model (for lighter model)
-  Future<void> loadVoiceModel(String modelFileName) async {
-    if (voiceModelPath != null) return;
-
-    voiceModelPath = await getModelPath(modelFileName);
-    print('VOICE MODEL PATH GOT AS: $voiceModelPath');
-
-    final _contextParams = ContextParams();
-    _contextParams.nCtx = 512; // Use a lighter context for the voice model
-    _contextParams.nPredit = 256; // Smaller prediction size for lighter model
-
-    try {
-      final loadCommand = llama.LlamaLoad(
-        path: voiceModelPath!,
-        modelParams: ModelParams(),
-        contextParams: _contextParams,
-        samplingParams: SamplerParams(),
-        format: _chatMLFormat,
-      );
-
-      final llamaParent = LlamaParent(loadCommand);
-      await llamaParent.init(); // Initialize here, but don't store
-
-      print("LlamaHelper.loadVoiceModel: Voice model loaded successfully");
-    } catch (e) {
-      print("LlamaHelper.loadVoiceModel: Error loading voice model: $e");
-      rethrow;
-    }
   }
 }
