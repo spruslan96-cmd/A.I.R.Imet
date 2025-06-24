@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
+import 'package:local_ai_chat/Widgets/model_init_bottomsheet.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
 import 'package:local_ai_chat/utils/llama_helpers.dart';
 import 'package:local_ai_chat/utils/ai_helpers.dart'; // Import the helper
@@ -69,6 +70,26 @@ class _TalkPageState extends State<TalkPage> {
       _modelLoaded = true;
       _selectedModel = modelFileName;
     });
+  }
+
+  void _openModelSettingsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => ModelInitBottomSheet(
+        llamaHelper: _llamaHelper,
+        onModelInitialized: (modelName) {
+          setState(() {
+            _selectedModel = modelName;
+            _modelLoaded = true;
+            _responseText = ""; // Optional: clear previous response
+          });
+        },
+      ),
+    );
   }
 
   Future<void> _generateText(String spokenText) async {
@@ -284,35 +305,9 @@ class _TalkPageState extends State<TalkPage> {
       appBar: AppBar(
         title: const Text("Talk"),
         actions: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: DropdownButton<String>(
-              value: _selectedModel,
-              hint: const Text("Select Model"),
-              items: _availableModels.map((modelPath) {
-                return DropdownMenuItem<String>(
-                  value: modelPath,
-                  child: Text(
-                    modelPath.split('/').last,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: theme.colorScheme.onBackground,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  _loadModel(value);
-                }
-              },
-              style: TextStyle(color: theme.colorScheme.onBackground),
-              underline: Container(
-                height: 1,
-                color: theme.colorScheme.onBackground,
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openModelSettingsBottomSheet,
           ),
         ],
       ),
