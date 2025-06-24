@@ -1,7 +1,6 @@
-// chat_page.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:local_ai_chat/Widgets/model_init_bottomsheet.dart';
 import 'package:local_ai_chat/Widgets/drawer.dart';
 import 'package:local_ai_chat/Widgets/prompt_text_field.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
@@ -19,62 +18,17 @@ class _ChatPageState extends State<ChatPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final List<Map<String, String>> _messages = [];
   final TextEditingController _controller = TextEditingController();
-  String? _selectedModel;
-  List<String> _availableModels = [];
   final _llamaHelper = LlamaHelper();
-  bool _isLoading = true;
+  // String? _selectedModel;
+  bool _isLoading = false;
   bool _modelLoaded = false;
   bool _isGenerating = false;
-  String _loadingMessage = "Loading Models...";
-
-  @override
-  void initState() {
-    super.initState();
-    AiHelpers.loadAvailableModels(
-      _llamaHelper,
-      (models) {
-        setState(() {
-          _availableModels = models;
-          _isLoading = false;
-          _loadingMessage = "";
-        });
-      },
-      (error) {
-        AiHelpers.showSnackBar(context, error);
-        setState(() {
-          _isLoading = false;
-          _loadingMessage = "";
-        });
-      },
-    );
-  }
+  String _loadingMessage = "";
 
   @override
   void dispose() {
-    print('chat page disposed');
     _llamaHelper.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadModel(String modelFileName) async {
-    AiHelpers.loadModel(
-      modelFileName,
-      _llamaHelper,
-      _modelLoaded,
-      (isLoading, message) {
-        setState(() {
-          _isLoading = isLoading;
-          _loadingMessage = message;
-        });
-      },
-      (error) {
-        AiHelpers.showSnackBar(context, error);
-      },
-    );
-    setState(() {
-      _modelLoaded = true;
-      _selectedModel = modelFileName;
-    });
   }
 
   Future<void> _generateText() async {
@@ -84,14 +38,11 @@ class _ChatPageState extends State<ChatPage> {
     if (prompt.isEmpty) return;
 
     setState(() {
-      _isGenerating = true; // Set loading state to true
+      _isGenerating = true;
       _messages.add({'sender': 'user', 'text': prompt});
       _messages.add({'sender': 'ai', 'text': '...'});
       _controller.clear();
     });
-    // print('_isGenerating = $_isGenerating');
-
-    String aiResponse = '';
 
     await AiHelpers.generateText(
       prompt,
@@ -99,19 +50,32 @@ class _ChatPageState extends State<ChatPage> {
       ChatHistory(),
       (response) {
         setState(() {
-          aiResponse = response;
-          _messages.last['text'] = aiResponse;
+          _messages.last['text'] = response;
         });
       },
-      (error) {
-        AiHelpers.showSnackBar(context, error);
-      },
-    ).whenComplete(() {
-      setState(() {
-        _isGenerating = false; // Reset loading state to false
-      });
-    });
-    // print('_isGenerating = $_isGenerating');
+      (error) => AiHelpers.showSnackBar(context, error),
+    ).whenComplete(() => setState(() => _isGenerating = false));
+  }
+
+  void _openModelSettingsBottomSheet() async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => ModelInitBottomSheet(
+        llamaHelper: _llamaHelper,
+        onModelInitialized: (modelName) {
+          setState(() {
+            // _selectedModel = modelName;
+            _modelLoaded = true;
+            _isLoading = false;
+            _loadingMessage = "";
+          });
+        },
+      ),
+    );
   }
 
   @override
@@ -123,35 +87,9 @@ class _ChatPageState extends State<ChatPage> {
       appBar: AppBar(
         title: const Text('Chat'),
         actions: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: DropdownButton<String>(
-              value: _selectedModel,
-              hint: const Text("Select Model"),
-              items: _availableModels.map((modelPath) {
-                return DropdownMenuItem<String>(
-                  value: modelPath,
-                  child: Text(
-                    modelPath.split('/').last,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: theme.colorScheme.onBackground,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  _loadModel(value);
-                }
-              },
-              style: TextStyle(color: theme.colorScheme.onBackground),
-              underline: Container(
-                height: 1,
-                color: theme.colorScheme.onBackground,
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openModelSettingsBottomSheet,
           ),
         ],
       ),
@@ -171,7 +109,7 @@ class _ChatPageState extends State<ChatPage> {
                     child: _messages.isEmpty && !_modelLoaded
                         ? const Center(
                             child: Text(
-                              'No model is loaded, please select a model',
+                              'No model is loaded. Click settings to initialize one.',
                               style: TextStyle(fontSize: 16),
                             ),
                           )
@@ -212,9 +150,7 @@ class _ChatPageState extends State<ChatPage> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: PromptTextField(
-                            controller: _controller,
-                          ),
+                          child: PromptTextField(controller: _controller),
                         ),
                         _isGenerating
                             ? const Padding(
@@ -226,7 +162,7 @@ class _ChatPageState extends State<ChatPage> {
                                 ),
                               )
                             : IconButton(
-                                icon: Icon(Icons.send),
+                                icon: const Icon(Icons.send),
                                 onPressed: _modelLoaded ? _generateText : null,
                                 color: _modelLoaded
                                     ? theme.colorScheme.primary
