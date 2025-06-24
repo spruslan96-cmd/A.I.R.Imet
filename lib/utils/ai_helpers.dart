@@ -18,11 +18,15 @@ class AiHelpers {
   }
 
   static Future<void> loadModel(
-      String modelFileName,
-      LlamaHelper llamaHelper,
-      bool modelLoaded,
-      Function(bool, String) onModelLoading,
-      Function(String) onError) async {
+    String modelFileName,
+    LlamaHelper llamaHelper,
+    bool modelLoaded,
+    Function(bool, String) onModelLoading,
+    Function(String) onError, {
+    required int nCtx,
+    required int nBatch,
+    required int nPredict,
+  }) async {
     if (modelLoaded) return;
 
     onModelLoading(true, "Loading Model...");

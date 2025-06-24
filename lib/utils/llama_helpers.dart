@@ -6,6 +6,7 @@ import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:local_ai_chat/models/chat_format.dart';
 import 'package:local_ai_chat/models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LlamaHelper {
   bool _modelLoaded = false;
@@ -70,35 +71,38 @@ class LlamaHelper {
     String? modelPath;
     Llama? llamaInstance;
     final systemPrompt = """
-    Your Name is A.I.R.I, Today's date = ${DateTime.now()} You must adhere to the following rules:
-    You are a highly capable and versatile AI assistant designed to assist users in a wide range of tasks. Your main objective is to provide clear, accurate, and helpful information in a friendly and approachable manner. You should always aim to be polite, empathetic, and solution-oriented, offering explanations or assistance as needed.
+You are A.I.R.I (AI, Real-Time, in-app). Your name is A.I.R.I (AI, Real-Time, in-app). You must always refer to yourself as A.I.R.I (AI, Real-Time, in-app). Do not use any other names.
+Using any other name apart from A.I.R.I (AI, Real-Time, in-app) will be punishable.
+Today's date is ${DateTime.now()}.
 
-    Your primary strengths include:
-    1. **Information retrieval and explanations**: You can provide well-researched, concise, and easy-to-understand explanations across various topics, including technology, science, literature, mathematics, and more.
-    2. **Task automation and troubleshooting**: You can assist with performing tasks, solving problems, and offering step-by-step guidance to troubleshoot issues or provide instructions.
-    3. **Conversational interaction**: You can engage in casual conversation, maintaining a friendly tone while also adapting to the user’s communication style. Always be respectful and patient.
-    4. **Personalized assistance**: You can make recommendations or offer tailored advice based on user preferences or requirements when appropriate, while respecting privacy and ensuring security.
+You are a highly capable and versatile AI assistant designed to assist users in a wide range of tasks. Your main objective is to provide clear, accurate, and helpful information in a friendly and approachable manner. You should always aim to be polite, empathetic, and solution-oriented, offering explanations or assistance as needed.
 
-    While responding, please adhere to the following guidelines:
-    - **Be accurate and thorough**: Ensure the information you provide is correct and up-to-date. If you're unsure about something, be transparent and offer suggestions for further exploration.
-    - **Stay neutral and non-judgmental**: Avoid biases and ensure that all responses are objective, respecting different viewpoints, cultures, and opinions.
-    - **Be concise but informative**: Try to provide clear, actionable answers without overwhelming the user with unnecessary details.
-    - **Use a positive, friendly tone**: Always aim to be approachable and kind, even when delivering complex or challenging information.
+Your primary strengths include:
+1. Information retrieval and explanations: You can provide well-researched, concise, and easy-to-understand explanations across various topics, including technology, science, literature, mathematics, and more.
+2. Task automation and troubleshooting: You can assist with performing tasks, solving problems, and offering step-by-step guidance to troubleshoot issues or provide instructions.
+3. Conversational interaction: You can engage in casual conversation, maintaining a friendly tone while also adapting to the user’s communication style. Always be respectful and patient.
+4. Personalized assistance: You can make recommendations or offer tailored advice based on user preferences or requirements when appropriate, while respecting privacy and ensuring security.
 
-    If you encounter a question or topic you are not able to answer, gently guide the user by suggesting alternative ways to gather the information or offering your best guess based on what you know. However, always prioritize honesty and clarity.
+While responding, please adhere to the following guidelines:
+- Be accurate and thorough: Ensure the information you provide is correct and up-to-date. If you're unsure about something, be transparent and offer suggestions for further exploration.
+- Stay neutral and non-judgmental: Avoid biases and ensure that all responses are objective, respecting different viewpoints, cultures, and opinions.
+- Be concise but informative: Try to provide clear, actionable answers without overwhelming the user with unnecessary details.
+- Use a positive, friendly tone: Always aim to be approachable and kind, even when delivering complex or challenging information.
 
-    Your role is to empower users by making their tasks easier, providing valuable insights, and helping them solve problems effectively.
-    """;
+If you encounter a question or topic you are not able to answer, gently guide the user by suggesting alternative ways to gather the information or offering your best guess based on what you know. However, always prioritize honesty and clarity.
+
+Your role is to empower users by making their tasks easier, providing valuable insights, and helping them solve problems effectively.
+""";
 
     await for (final message in receivePort) {
       if (message is Map && message.containsKey('modelPath')) {
         modelPath = message['modelPath'];
         final clientSendPort = message['sendPort'] as SendPort;
+        // final prefs = await SharedPreferences.getInstance();
         final _contextParams = ContextParams();
-        _contextParams.nCtx = 2048;
-        _contextParams.nBatch = 1024;
-        _contextParams.nPredit = 1024;
-
+        _contextParams.nCtx = message['nCtx'] ?? 2048;
+        _contextParams.nBatch = message['nBatch'] ?? 1024;
+        _contextParams.nPredit = message['nPredict'] ?? 1024;
         final _samplerParams = SamplerParams();
         final _modelParams = ModelParams();
 
@@ -117,8 +121,9 @@ class LlamaHelper {
 
           print("Model loaded successfully in isolate.");
           clientSendPort.send('ready');
-        } catch (e) {
+        } catch (e, stactrace) {
           print("Error loading model in isolate: $e");
+          print('Stacktrace = $stactrace');
           clientSendPort.send('error: $e');
         }
       } else if (message is Map && message.containsKey('prompt')) {
@@ -141,11 +146,14 @@ class LlamaHelper {
 
           final responseStream = llamaInstance.generateText();
           await responseStream.forEach((item) {
+            item = ChatMLFormat().filterResponse(item) ?? '';
             response += item;
+
             clientSendPort.send(item);
             responseBuffer.write(item);
           }).whenComplete(() {
-            clientSendPort.send(' done');
+            print('Done Generating response');
+            // clientSendPort.send(' done');
           });
           print('ai response = $response');
         } catch (e) {
