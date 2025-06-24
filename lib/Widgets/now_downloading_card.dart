@@ -7,53 +7,102 @@ class NowDownloadingCard extends StatelessWidget {
   final int? modelSize;
 
   const NowDownloadingCard({
-    Key? key,
+    super.key,
     required this.model,
     required this.onCancelDownload,
     required this.downloadProgress,
     required this.modelSize,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final String modelId = model['id'] ?? 'Unknown';
+
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Stack(
         children: [
-          // Green progress background
+          /// Progress background
           Positioned.fill(
             child: FractionallySizedBox(
               widthFactor: downloadProgress,
+              alignment: Alignment.centerLeft,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12),
+                  color: theme.colorScheme.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
             ),
           ),
-          ListTile(
-            title: Text(model['id']),
-            subtitle: modelSize != null
-                ? Text("Size: ${modelSize! ~/ (1024 * 1024)} MB")
-                : null,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+
+          /// Content
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
               children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    value: downloadProgress,
-                    strokeWidth: 3,
+                /// Icon
+                Icon(Icons.downloading, color: theme.colorScheme.primary),
+
+                const SizedBox(width: 16),
+
+                /// Model info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        modelId,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          if (modelSize != null)
+                            Text(
+                              "Size: ${(modelSize! / (1024 * 1024)).toStringAsFixed(1)} MB",
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "${(downloadProgress * 100).toStringAsFixed(0)}%",
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => onCancelDownload(model['id']),
-                  icon: const Icon(Icons.cancel, color: Colors.red),
-                ),
+
+                /// Spinner + Cancel button
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        value: downloadProgress,
+                        strokeWidth: 3,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: "Cancel download",
+                      icon: const Icon(Icons.cancel),
+                      color: theme.colorScheme.error,
+                      onPressed: () => onCancelDownload(modelId),
+                    ),
+                  ],
+                )
               ],
             ),
           ),
