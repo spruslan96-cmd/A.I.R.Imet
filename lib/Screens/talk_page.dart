@@ -23,8 +23,6 @@ class _TalkPageState extends State<TalkPage> {
   bool _modelLoaded = false;
   String _spokenText = '';
   String _responseText = '';
-  String? _selectedModel;
-  List<String> _availableModels = [];
   bool _isListening = false;
   bool _isSpeaking = false;
   bool _isLoading = false;
@@ -42,34 +40,12 @@ class _TalkPageState extends State<TalkPage> {
     AiHelpers.loadAvailableModels(
       _llamaHelper,
       (models) {
-        setState(() {
-          _availableModels = models;
-        });
+        setState(() {});
       },
       (error) {
         AiHelpers.showSnackBar(context, error);
       },
     );
-  }
-
-  Future<void> _loadModel(String modelFileName) async {
-    AiHelpers.loadVoiceModel(
-      modelFileName,
-      _llamaHelper,
-      _modelLoaded,
-      (isLoading, message) {
-        setState(() {
-          _responseText = message;
-        });
-      },
-      (error) {
-        AiHelpers.showSnackBar(context, error);
-      },
-    );
-    setState(() {
-      _modelLoaded = true;
-      _selectedModel = modelFileName;
-    });
   }
 
   void _openModelSettingsBottomSheet() {
@@ -83,7 +59,6 @@ class _TalkPageState extends State<TalkPage> {
         llamaHelper: _llamaHelper,
         onModelInitialized: (modelName) {
           setState(() {
-            _selectedModel = modelName;
             _modelLoaded = true;
             _responseText = ""; // Optional: clear previous response
           });
@@ -94,30 +69,46 @@ class _TalkPageState extends State<TalkPage> {
 
   Future<void> _generateText(String spokenText) async {
     setState(() {
-      _isLoading = true; // Show loading animation
+      _isLoading = true;
+      _responseText = "";
     });
 
-    AiHelpers.generateText(
+    String fullResponse = "";
+
+    AiHelpers.generateVoice(
       spokenText,
       _llamaHelper,
       ChatHistory(),
-      (response) {
+      (responseChunk) {
+        fullResponse += responseChunk;
         setState(() {
-          _responseText = response;
-          _isLoading = false; // Hide loading animation
-          _isSpeaking = true; // Start speaking animation
+          _responseText = fullResponse;
         });
-
-        _speakResponse(response); // Speak the response
       },
       (error) {
         AiHelpers.showSnackBar(context, error);
+        setState(() {
+          _isLoading = false;
+          _isSpeaking = false;
+        });
+      },
+      onComplete: () async {
+        print('Inside onCopmlete');
+        setState(() {
+          _isLoading = false;
+          _isSpeaking = true;
+        });
+        await _speakResponse(fullResponse);
+        setState(() {
+          _isSpeaking = false;
+        });
       },
     );
   }
 
   // Speak the response text
   Future<void> _speakResponse(String text) async {
+    print('Starting to speak now');
     await _flutterTts.setLanguage("en-US"); // Set language to English
     await _flutterTts.setSpeechRate(0.5); // Set a slower speech rate
     await _flutterTts.speak(text); // Speak the response
@@ -283,13 +274,33 @@ class _TalkPageState extends State<TalkPage> {
       _isListening = false;
     });
     await _speechToText.stop();
-    if (_spokenText.trim().isNotEmpty) {
-      _generateText(_spokenText);
-    } else {
-      AiHelpers.showSnackBar(context, "No speech detected.");
-    }
+
     if (_speechTimeout != null && _speechTimeout!.isActive) {
       _speechTimeout!.cancel();
+    }
+
+    if (_spokenText.trim().isNotEmpty) {
+      // 🎲 Randomized acknowledgment responses
+      List<String> acknowledgments = [
+        "Alright, give me a sec.",
+        "Okay, thinking about that...",
+        "Hmm, let me figure this out.",
+        "Got it, one moment.",
+        "Alright, cooking up something smart!",
+        "Working on your request now...",
+        "Just a sec, getting my thoughts together.",
+      ];
+
+      final random = Random();
+      final selectedAcknowledgment =
+          acknowledgments[random.nextInt(acknowledgments.length)];
+
+      await _flutterTts.setLanguage("en-US");
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.speak(selectedAcknowledgment);
+      await _generateText(_spokenText);
+    } else {
+      AiHelpers.showSnackBar(context, "No speech detected.");
     }
   }
 

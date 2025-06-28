@@ -89,30 +89,36 @@ class AiHelpers {
 
   // New method for generating voice
   static Future<void> generateVoice(
-      String prompt,
-      LlamaHelper llamaHelper,
-      ChatHistory chatHistory,
-      Function(String) onResponseGenerated,
-      Function(String) onError) async {
-    String result = '';
+    String prompt,
+    LlamaHelper llamaHelper,
+    ChatHistory chatHistory,
+    Function(String) onResponseGenerated,
+    Function(String) onError, {
+    Function()? onComplete,
+  }) async {
     try {
-      final generatedVoiceStream = await llamaHelper.generateText(prompt);
-      generatedVoiceStream.listen(
+      final generatedTextStream = await llamaHelper.generateText(prompt);
+      String fullResponse = '';
+
+      generatedTextStream.listen(
         (chunk) {
-          result += chunk;
-          onResponseGenerated(result);
+          fullResponse += chunk;
+          onResponseGenerated(chunk); // ✅ Send only the chunk
         },
         onError: (error) {
-          print("Error generating voice: $error");
-          onError("Error generating voice: $error");
+          print("Error generating text: $error");
+          onError("Error generating text: $error");
         },
         onDone: () {
-          chatHistory.addMessage(role: Role.assistant, content: result);
+          print('Triggering onDone');
+          chatHistory.addMessage(role: Role.assistant, content: fullResponse);
+          if (onComplete != null) onComplete(); // ✅ Trigger complete callback
         },
+        cancelOnError: true,
       );
     } catch (e) {
-      print("Error generating voice: $e");
-      onError("Error generating voice: $e");
+      print("Error generating text: $e");
+      onError("Error generating text: $e");
     }
   }
 
