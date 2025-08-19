@@ -1,17 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:dio/dio.dart';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
-import 'package:local_ai_chat/models/chat_format.dart';
-import 'package:local_ai_chat/models/chat_history.dart';
+// import 'package:local_ai_chat/models/chat_format.dart' as chat_format;
+import 'package:local_ai_chat/models/chat_history.dart' as chat_history;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class LlamaHelper {
   bool _modelLoaded = false;
-  final ChatMLFormat _chatMLFormat = ChatMLFormat();
-  final chatHistory = ChatHistory();
   String? modelPath;
   SendPort? _isolateSendPort;
   Isolate? _isolate;
@@ -70,6 +66,8 @@ class LlamaHelper {
 
     String? modelPath;
     Llama? llamaInstance;
+    final chatHistory = chat_history.ChatHistory();
+
     final systemPrompt = """
 You are A.I.R.I (AI, Real-Time, in-app). Your name is A.I.R.I (AI, Real-Time, in-app). You must always refer to yourself as A.I.R.I (AI, Real-Time, in-app). Do not use any other names.
 Using any other name apart from A.I.R.I (AI, Real-Time, in-app) will be punishable.
@@ -102,7 +100,7 @@ Your role is to empower users by making their tasks easier, providing valuable i
         final _contextParams = ContextParams();
         _contextParams.nCtx = message['nCtx'] ?? 2048;
         _contextParams.nBatch = message['nBatch'] ?? 1024;
-        _contextParams.nPredit = message['nPredict'] ?? 1024;
+        _contextParams.nPredict = message['nPredict'] ?? 1024;
         final _samplerParams = SamplerParams();
         final _modelParams = ModelParams();
 
@@ -116,8 +114,8 @@ Your role is to empower users by making their tasks easier, providing valuable i
           );
 
           //add system prompt to chat history.
-          final chatHistory = ChatHistory();
-          chatHistory.addMessage(role: Role.system, content: systemPrompt);
+          chatHistory.addMessage(
+              role: chat_history.Role.system, content: systemPrompt);
 
           print("Model loaded successfully in isolate.");
           clientSendPort.send('ready');
@@ -138,8 +136,9 @@ Your role is to empower users by making their tasks easier, providing valuable i
         String response = '';
         try {
           print('User prompt = $prompt');
-          chatHistory.addMessage(role: Role.user, content: prompt);
-          final formattedPrompt = chatHistory.exportFormat(ChatFormat.chatml);
+          chatHistory.addMessage(role: chat_history.Role.user, content: prompt);
+          final formattedPrompt =
+              chatHistory.exportFormat(chat_history.ChatFormat.chatml);
           llamaInstance.setPrompt(formattedPrompt);
 
           final responseBuffer = StringBuffer();
