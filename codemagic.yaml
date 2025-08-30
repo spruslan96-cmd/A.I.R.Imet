@@ -4,7 +4,6 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
-      # Не добавляем android: {...}, чтобы не было ошибки extra fields
     scripts:
       - name: Get Flutter dependencies
         script: |
@@ -18,6 +17,4 @@ workflows:
     publishing:
       email:
         recipients:
-          - spruslan96@gmail.com
-        on_build_success: true
-        on_build_failure: true
+          spruslan96@gmail.com
