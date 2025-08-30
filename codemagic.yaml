@@ -1,10 +1,12 @@
 workflows:
   android-workflow:
-    name: Android Build
-    max_build_duration: 60
+    name: Build Android APK
     environment:
       flutter: stable
-      ndk: 23.1.7779620
+      xcode: latest
+      android:
+        ndk: 23.1.7779620
+        cmake: 3.18.1
     scripts:
       - name: Get Flutter dependencies
         script: flutter pub get
