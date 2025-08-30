@@ -1,29 +1,15 @@
 workflows:
-  android-build:
-    name: Android Build
-    max_build_duration: 60
-    environment:workflows:
   android-workflow:
     name: Android Build
+    max_build_duration: 60
     environment:
-      flutter:  stable
+      flutter: stable
       android:
         ndk: 25.1.8937393
     scripts:
-      - flutter pub get
-      - flutter build apk --release
-      flutter: stable
-      java: 17
-      android:
-        ndk: 23.1.7779620
-    scripts:
-      - name: Get Flutter packages
+      - name: Get Flutter dependencies
         script: flutter pub get
       - name: Build APK
-        script: flutter build apk --release --build-name=1.0.0 --build-number=1
+        script: flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-    publishing:
-      email:
-        recipients:
-          - spruslan96@gmail.com
