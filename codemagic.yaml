@@ -1,20 +1,18 @@
 workflows:
-  android-workflow:
-    name: Build Android APK
+  android-build:
+    name: Android ARM64 Build
+    max_build_duration: 60
     environment:
       flutter: stable
       xcode: latest
+      android:
+        ndk: "21.4.7075529"
+        build-tools: "33.0.2"
+        api-level: 33
     scripts:
-      - name: Get Flutter dependencies
-        script: |
-          flutter pub get
+      - name: Install Flutter dependencies
+        script: flutter pub get
       - name: Build release APK
-        script: |
-          flutter clean
-          flutter build apk --release
+        script: flutter build apk --release --target-platform android-arm64
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-    publishing:
-      email:
-        recipients:
-          - your-spruslan96@gmail.com
