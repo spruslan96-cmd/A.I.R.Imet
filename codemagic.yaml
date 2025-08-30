@@ -6,8 +6,9 @@ workflows:
       flutter: stable
       java: 17
       ndk: 23.1.7779620
-      cmake: 3.18.1
     scripts:
+      - name: Install CMake 3.18.1
+        script: sdkmanager "cmake;3.18.1"
       - name: Get Flutter dependencies
         script: flutter pub get
       - name: Build APK
