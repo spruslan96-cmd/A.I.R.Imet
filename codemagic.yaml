@@ -1,28 +1,21 @@
 workflows:
-  android-workflow:
-    name: Android Release (NDK 23)
-    max_build_duration: 120
+  android-release:
+    name: Android Release
+    max_build_duration: 60
     environment:
       flutter: stable
-      java: 17
       vars:
-        ANDROID_NDK_VERSION: 23.1.7779620
-        ANDROID_CMAKE_VERSION: 3.18.1
-    cache:
-      cache_paths:
-        - $HOME/.pub-cache
-        - $HOME/.gradle/caches
-        - $HOME/.gradle/wrapper
+        ANDROID_SDK_ROOT: /usr/local/share/android-sdk
+      cocoapods: default
     scripts:
-      - name: Install dependencies
+      - name: Install specific NDK and CMake
         script: |
-          flutter pub get
-      - name: Build release APK
-        script: |
-          flutter build apk --release
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "cmake;3.18.1"
+          export ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/23.1.7779620
+          export PATH=$ANDROID_NDK:$PATH
+      - name: Get dependencies
+        script: flutter pub get
+      - name: Build APK
+        script: flutter build apk --release --target-platform android-arm64
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-    publishing:
-      email:
-        recipients:
-          - spruslan96@gmail.com
