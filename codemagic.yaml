@@ -5,9 +5,9 @@ workflows:
     environment:
       flutter: stable
       java: 17
-      android:
-        ndk: 23.1.7779620
-        cmake: 3.18.1
+      vars:
+        ANDROID_NDK_VERSION: 23.1.7779620
+        ANDROID_CMAKE_VERSION: 3.18.1
     cache:
       cache_paths:
         - $HOME/.pub-cache
