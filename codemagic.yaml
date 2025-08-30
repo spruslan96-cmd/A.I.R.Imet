@@ -4,10 +4,10 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
-      android:
-        ndk: 23.1.7779620
-        cmake: 3.18.1
     scripts:
+      - name: Install CMake & NDK
+        script: |
+          sdkmanager --install "ndk;23.1.7779620" "cmake;3.18.1"
       - name: Get Flutter dependencies
         script: flutter pub get
       - name: Build APK
