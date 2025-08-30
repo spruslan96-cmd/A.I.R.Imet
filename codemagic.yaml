@@ -2,7 +2,16 @@ workflows:
   android-build:
     name: Android Build
     max_build_duration: 60
+    environment:workflows:
+  android-workflow:
+    name: Android Build
     environment:
+      flutter: stable
+      android:
+        ndk: 25.1.8937393
+    scripts:
+      - flutter pub get
+      - flutter build apk --release
       flutter: stable
       java: 17
       android:
