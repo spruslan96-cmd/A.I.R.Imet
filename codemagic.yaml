@@ -6,7 +6,7 @@ workflows:
   android-workflow:
     name: Android Build
     environment:
-      flutter: stable
+      flutter:  stable
       android:
         ndk: 25.1.8937393
     scripts:
