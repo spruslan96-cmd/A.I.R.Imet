@@ -26,4 +26,4 @@ workflows:
         script: flutter build apk --release --verbose
 
     artifacts:
-      - build/app/outputs/flutter-apk/app-release.
+      - build/app/outputs/flutter-apk/app-release.apk
