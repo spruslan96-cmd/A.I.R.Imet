@@ -17,4 +17,4 @@ workflows:
     publishing:
       email:
         recipients:
-          spruslan96@gmail.com
+          - your-spruslan96@gmail.com
