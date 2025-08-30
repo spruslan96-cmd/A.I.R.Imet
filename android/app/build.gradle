@@ -1,20 +1,18 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    // Flutter Gradle Plugin должен идти последним
     id "dev.flutter.flutter-gradle-plugin"
 }
 
 android {
     namespace = "com.agamairi.airi"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "23.1.7779620" // стабильная версия NDK для сборки
+    ndkVersion "23.1.7779620"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8
     }
@@ -26,7 +24,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Ограничение на ABI для Samsung S8
         ndk {
             abiFilters "arm64-v8a"
         }
@@ -34,19 +31,7 @@ android {
 
     buildTypes {
         release {
-            // Для простоты можно использовать debug signingConfig, но для магазина нужно заменить на release
             signingConfig = signingConfigs.debug
-            // Убираем minify для стабильной сборки C++
-            minifyEnabled false
-            shrinkResources false
-        }
-    }
-
-    // Подключение CMake
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt" // если CMakeLists есть
-            version "3.18.1"
         }
     }
 }
