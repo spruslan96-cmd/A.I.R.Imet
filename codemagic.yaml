@@ -4,13 +4,27 @@ workflows:
     max_build_duration: 60
     environment:
       flutter: stable
-      android:
-        ndk: 23.1.7779620
-        cmake: 3.18.1
+      vars:
+        ANDROID_NDK_HOME: /usr/local/share/android-sdk/ndk/23.1.7779620
+        ANDROID_NDK_ROOT: /usr/local/share/android-sdk/ndk/23.1.7779620
+        PATH: /usr/local/share/android-sdk/cmake/3.18.1/bin:$PATH
     scripts:
+      - name: Flutter doctor
+        script: flutter doctor -v
+
+      - name: Check NDK & CMake
+        script: |
+          echo ">>> Checking NDK and CMake..."
+          echo "NDK path: $ANDROID_NDK_HOME"
+          ls $ANDROID_NDK_HOME
+          cmake --version || echo "CMake not found!"
+          $ANDROID_NDK_HOME/ndk-build --version || echo "ndk-build not found!"
+
       - name: Get Flutter dependencies
         script: flutter pub get
+
       - name: Build APK
         script: flutter build apk --release
+
     artifacts:
-      - build/app/outputs/flutter-apk/app-release.apk
+      - build/app/outputs/flutter-apk/app-relea
