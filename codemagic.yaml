@@ -1,27 +1,19 @@
 workflows:
-  android-release:
-    name: Android Release
-    max_build_duration: 90
+  android-workflow:
+    name: Android Build
+    max_build_duration: 60
     environment:
       flutter: stable
       vars:
-        FLUTTER_BUILD_MODE: "release"
+        FLUTTER_CHANNEL: stable
+      cocoapods: default
     scripts:
-      - name: Install required SDK components
+      - name: Install Android SDK & NDK
         script: |
-          echo "Installing NDK r23b and CMake 3.18.1..."
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620" "cmake;3.18.1"
-      - name: Set environment variables for NDK and CMake
-        script: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.1.7779620
-          export PATH=$ANDROID_NDK_HOME:$PATH
-          export CMAKE_HOME=$ANDROID_HOME/cmake/3.18.1/bin
-          export PATH=$CMAKE_HOME:$PATH
+          yes | sdkmanager "cmake;3.18.1" "ndk;23.1.7779620"
       - name: Get Flutter dependencies
         script: flutter pub get
-      - name: Clean previous builds
-        script: flutter clean
       - name: Build APK
-        script: flutter build apk --release --target-platform android-arm64
+        script: flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
